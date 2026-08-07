@@ -1,0 +1,4 @@
+interface:
+  display_name: "AscendC 算子精度验证"
+  short_description: "重编 Host 与 Kernel 并对比 PyTorch 精度"
+  default_prompt: "使用 $kernel-precision 重新编译一个 AscendC 算子并验证其与 PyTorch reference 的精度。"

@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kernel Bottleneck"
+  short_description: "使用稳定 key 认定 AscendC 单算子瓶颈与证据链"
+  default_prompt: "Use $kernel-bottleneck to identify the current AscendC kernel bottleneck with a stable bottleneck_key and evidence chain."
