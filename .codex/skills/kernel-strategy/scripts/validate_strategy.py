@@ -1,19 +1,70 @@
 #!/usr/bin/env python3
-"""Validate fixed strategy selection and source-specific executable changes."""
+"""Validate cause-to-strategy selection and source-specific actions."""
 
 from __future__ import annotations
 
 import argparse
 import json
+import re
 import sys
 from pathlib import Path
 
-from derive_strategy import derive
+from derive_strategy import OPERATIONS, RULES
 
+OPERATION_SLOTS = json.loads(
+    (Path(__file__).resolve().parents[1] / "references/operation-slots.json").read_text(encoding="utf-8")
+)
+if set(OPERATION_SLOTS) != set(OPERATIONS.values()):
+    raise RuntimeError("operation-slots.json 必须覆盖全部 operation")
 
 BOTTLENECK_SCRIPTS = Path(__file__).resolve().parents[2] / "kernel-bottleneck/scripts"
 sys.path.insert(0, str(BOTTLENECK_SCRIPTS))
-from validate_report import validate as validate_bottleneck  # noqa: E402
+from validate_report import CAUSES, validate as validate_bottleneck  # noqa: E402
+
+
+EDIT_CONSTRAINT_PREFIXES = (
+    "保持", "确保", "禁止", "不得", "不改变", "证明",
+    "UB 总", "总 UB", "单缓冲总量", "总量低于", "容量低于",
+)
+CONSTRAINT_EDIT_PREFIXES = (
+    "新增", "删除", "改为", "替换", "将", "把", "增加", "移除", "改写",
+)
+TRANSFORM_TERMS = (
+    "改为", "替换", "外提", "合并", "删除", "新增", "增加", "移除",
+    "重排", "拆分", "缓存", "扩大", "缩小", "从", "修改", "重用",
+)
+SOURCE_OBJECT_TERMS = (
+    "blockdim", "block", "tiling", "task", "row", "tile", "loop", "循环", "区间",
+    "索引", "偏移", "映射", "余数", "queue", "tque", "tbuf", "buffer", "缓冲",
+    "getvalue", "setvalue", "datacopy", "reduce", "vector", "scalar", "gm", "ub", "l1",
+    "weight", "bias", "input", "output", "workspace", "stride", "padding", "mask", "repeat",
+    "dtype", "shape", "count", "length", "start", "end", "base", "process", "init",
+)
+GENERIC_OPERATION_EDITS = {
+    "提高并行度", "增加并行度", "使用更多核", "使用可用核",
+    "重新平衡任务", "平衡任务划分", "均衡多核负载",
+    "减少固定开销", "删除冗余开销", "优化热路径",
+    "向量化归约", "将标量归约向量化", "向量化逐元素计算",
+    "合并小搬运", "优化数据搬运", "调整ub布局",
+}
+
+
+def validate_edit(index: int, edit: str) -> None:
+    normalized = re.sub(r"[\s。，；,;:_\-]", "", edit).lower()
+    if normalized in GENERIC_OPERATION_EDITS:
+        raise RuntimeError(f"action {index} edit 只重复 operation，缺少当前源码对象：{edit}")
+    if "：" not in edit and ":" not in edit:
+        raise RuntimeError(f"action {index} edit 必须使用 <源码对象>：<明确变换>：{edit}")
+    object_text, transform_text = re.split(r"[：:]", edit, maxsplit=1)
+    if not object_text.strip() or not transform_text.strip():
+        raise RuntimeError(f"action {index} edit 的源码对象或变换为空：{edit}")
+    if not any(term in transform_text for term in TRANSFORM_TERMS):
+        raise RuntimeError(f"action {index} edit 缺少明确变换动作：{edit}")
+    lowered = object_text.lower()
+    has_identifier = re.search(r"[A-Za-z_][A-Za-z0-9_]*(?:\([^)]*\))?", object_text) is not None
+    has_source_object = has_identifier or any(term in lowered for term in SOURCE_OBJECT_TERMS)
+    if not has_source_object:
+        raise RuntimeError(f"action {index} edit 缺少 target symbol 内可定位的源码对象：{edit}")
 
 
 def load(path: Path, label: str) -> dict:
@@ -26,87 +77,107 @@ def load(path: Path, label: str) -> dict:
     return value
 
 
-def validate_reasoning(reasoning: object) -> None:
-    if not isinstance(reasoning, list) or not 2 <= len(reasoning) <= 8:
-        raise RuntimeError("reasoning 必须包含 2–8 条记录")
-    if any(
-        not isinstance(item, str) or "证据：" not in item or "推断：" not in item
-        for item in reasoning
-    ):
-        raise RuntimeError("reasoning 每项必须使用“证据：…；推断：…”格式")
-
-
-HARD_BLOCKERS = (
-    "target不存在", "越界修改", "API不支持", "dtype不支持",
-    "容量不足", "接口语义冲突", "数学语义冲突", "change冲突",
-)
-
-
 def target_file(project: Path, target: str) -> str:
     if "::" not in target:
-        raise RuntimeError(f"target 必须使用 相对文件::符号 格式：{target}")
+        raise RuntimeError(f"target 必须使用 相对文件::符号：{target}")
     relative, symbol = target.split("::", 1)
-    if not relative.startswith(("op_host/", "op_kernel/")) or not symbol.strip():
-        raise RuntimeError(f"target 超出允许范围或缺少符号：{target}")
     candidate = (project / relative).resolve()
+    if not relative.startswith(("op_host/", "op_kernel/")) or not symbol.strip():
+        raise RuntimeError(f"target 超出范围或缺少符号：{target}")
     if not candidate.is_relative_to(project.resolve()) or not candidate.is_file():
         raise RuntimeError(f"target 文件不存在：{relative}")
+    symbol_leaf = symbol.rsplit("::", 1)[-1]
+    if symbol_leaf not in candidate.read_text(encoding="utf-8", errors="replace"):
+        raise RuntimeError(f"target 符号不存在：{target}")
     return relative
 
 
 def validate(bottleneck_path: Path, strategy_path: Path) -> None:
     validate_bottleneck(bottleneck_path)
-    bottleneck = load(bottleneck_path, "瓶颈")
+    bottleneck_report = load(bottleneck_path, "瓶颈")
     report = load(strategy_path, "策略")
     if set(report) != {"reasoning", "strategy"}:
         raise RuntimeError("strategy.json 只能包含 reasoning 和 strategy")
-    validate_reasoning(report["reasoning"])
-    expected = derive(bottleneck)
-    expected_strategy = expected["strategy"]
+    reasoning = report["reasoning"]
+    if not isinstance(reasoning, list) or len(reasoning) != 2:
+        raise RuntimeError("reasoning 必须固定包含 2 条记录")
+    if any(not isinstance(item, str) or "证据：" not in item or "推断：" not in item for item in reasoning):
+        raise RuntimeError("reasoning 必须使用证据到推断格式")
+    bottleneck = bottleneck_report.get("bottleneck")
+    cause = bottleneck.get("cause_key") if isinstance(bottleneck, dict) else None
+    expected_key = RULES.get(cause)
     actual = report["strategy"]
     if actual is None:
-        if expected_strategy is None:
-            return
-        reasoning_text = "\n".join(report["reasoning"]).replace(" ", "")
-        if "strategy=null" not in reasoning_text:
-            raise RuntimeError("停止策略必须在 reasoning 中明确推导 strategy=null")
-        if not any(f"硬阻断：{blocker}" in reasoning_text for blocker in HARD_BLOCKERS):
-            raise RuntimeError("strategy=null 必须说明一个受支持的硬阻断类型")
+        if expected_key is not None:
+            raise RuntimeError("固定规则存在策略，不能输出 strategy=null")
         return
-    if expected_strategy is None:
+    if expected_key is None:
         raise RuntimeError("固定规则没有可选策略")
-    if not isinstance(actual, dict) or set(actual) != {"strategy_key", "description", "changes"}:
-        raise RuntimeError("strategy 字段不符合固定契约")
-    for field in ("strategy_key", "description"):
-        if actual[field] != expected_strategy[field]:
-            raise RuntimeError(f"{field} 与固定策略选择不一致")
-    changes = actual["changes"]
-    expected_changes = expected_strategy["changes"]
-    if not isinstance(changes, list) or len(changes) != len(expected_changes):
-        raise RuntimeError("changes 数量与固定策略不一致")
+    if not isinstance(actual, dict) or set(actual) != {"strategy_key", "actions"}:
+        raise RuntimeError("strategy 只能包含 strategy_key 和 actions")
+    if actual["strategy_key"] != expected_key:
+        raise RuntimeError("strategy_key 与 cause 固定映射不一致")
+    actions = actual["actions"]
+    if not isinstance(actions, list) or not 1 <= len(actions) <= 4:
+        raise RuntimeError("actions 必须包含 1–4 项")
     project = bottleneck_path.resolve().parent.parent
-    expected_keys = [item["change_key"] for item in expected_changes]
-    actual_keys = []
-    for change in changes:
-        if not isinstance(change, dict) or set(change) != {"change_key", "target", "action"}:
-            raise RuntimeError("每项 change 必须包含 change_key、target、action")
-        key = change["change_key"]
-        actual_keys.append(key)
-        target = change["target"]
-        action = change["action"]
-        if not isinstance(target, str) or not target.strip():
-            raise RuntimeError(f"{key} 缺少具体 target")
-        target_file(project, target)
-        if not isinstance(action, str) or len(action.strip()) < 12:
-            raise RuntimeError(f"{key} 缺少足够具体的 action")
-    if actual_keys != expected_keys:
-        raise RuntimeError("change_key 或顺序与固定策略不一致")
-    reasoning_text = "\n".join(report["reasoning"])
-    if actual["strategy_key"] not in reasoning_text:
-        raise RuntimeError("reasoning 未引用 strategy_key")
-    missing = [key for key in actual_keys if key not in reasoning_text]
-    if missing:
-        raise RuntimeError("reasoning 未引用 change_key：" + ", ".join(missing))
+    identities = set()
+    for index, action in enumerate(actions, 1):
+        fields = {"target", "operation", "edits", "constraints"}
+        if not isinstance(action, dict) or set(action) != fields:
+            raise RuntimeError(f"action {index} 字段必须为 target、operation、edits、constraints")
+        if not isinstance(action["target"], str):
+            raise RuntimeError(f"action {index} target 非法")
+        target_file(project, action["target"])
+        if action["operation"] != OPERATIONS[expected_key]:
+            raise RuntimeError(f"action {index} operation 与 strategy_key 不一致")
+        identity = (action["target"], action["operation"])
+        if identity in identities:
+            raise RuntimeError(f"action {index} 与前项 target+operation 重复，应合并")
+        identities.add(identity)
+        edits = action["edits"]
+        constraints = action["constraints"]
+        if not isinstance(edits, list) or not 1 <= len(edits) <= 4:
+            raise RuntimeError(f"action {index} edits 必须包含 1–4 项")
+        if not isinstance(constraints, list) or not 1 <= len(constraints) <= 4:
+            raise RuntimeError(f"action {index} constraints 必须包含 1–4 项")
+        if any(not isinstance(text, str) or not 8 <= len(text.strip()) <= 320 for text in edits):
+            raise RuntimeError(f"action {index} edit 必须是 8–320 字符的具体修改")
+        if any(not isinstance(text, str) or not 4 <= len(text.strip()) <= 240 for text in constraints):
+            raise RuntimeError(f"action {index} constraint 必须是 4–240 字符的边界")
+        for edit in edits:
+            if edit.strip().startswith(EDIT_CONSTRAINT_PREFIXES):
+                raise RuntimeError(f"action {index} edit 只写了不变式，应移入 constraints：{edit}")
+            validate_edit(index, edit)
+        for constraint in constraints:
+            if constraint.strip().startswith(CONSTRAINT_EDIT_PREFIXES):
+                raise RuntimeError(f"action {index} constraint 包含源码变换，应移入 edits：{constraint}")
+        if any("performance." in item for item in (*edits, *constraints)):
+            raise RuntimeError(f"action {index} 不得引用 performance.* 或把性能证据写入 action")
+    text = "\n".join(reasoning)
+    for token in (f"cause_key={cause}", f"strategy_key={expected_key}"):
+        if token not in text:
+            raise RuntimeError(f"reasoning 未引用 {token}")
+    operation = OPERATIONS[expected_key]
+    if f"operation={operation}" not in text:
+        raise RuntimeError(f"reasoning 未将当前源码与 operation={operation} 连接")
+    bottleneck_evidence = bottleneck_report.get("evidence", [])
+    cause_evidence_key = CAUSES[cause][1]
+    cause_evidence = next(
+        (item for item in bottleneck_evidence if item.get("evidence_key") == cause_evidence_key),
+        None,
+    )
+    if cause_evidence is None:
+        raise RuntimeError(f"缺少 cause evidence：{cause_evidence_key}")
+    grounded = reasoning[1]
+    for token in (cause_evidence_key, cause_evidence["source"]):
+        if token not in grounded:
+            raise RuntimeError("第 2 条 reasoning 必须引用当前 cause evidence 的 key 和 source")
+    if cause_evidence["observation"] in grounded:
+        raise RuntimeError("第 2 条 reasoning 不得复制 cause evidence observation")
+    for action in actions:
+        if action["target"] not in grounded:
+            raise RuntimeError(f"第 2 条 reasoning 未引用 action target：{action['target']}")
 
 
 def main() -> None:

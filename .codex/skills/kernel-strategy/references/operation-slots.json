@@ -1,0 +1,17 @@
+{
+  "increase_parallelism": ["parallel_limit", "block_dim_or_task_count", "kernel_task_mapping", "idle_core_and_tail"],
+  "rebalance_task_partition": ["total_tasks", "base_and_remainder", "per_core_range_or_logical_block", "coverage"],
+  "remove_hot_path_overhead": ["repeated_object", "hoist_or_cache_scope", "resource_lifetime"],
+  "replace_scalar_reduction": ["scalar_loop", "ub_tile", "vector_reduce", "cross_tile_merge_and_index"],
+  "replace_scalar_elementwise": ["scalar_loop", "contiguous_copy", "vector_api_chain", "valid_length_writeback"],
+  "merge_small_transfers": ["small_copy_calls", "contiguous_range", "batch_length", "alignment_and_tail"],
+  "improve_data_locality": ["tile_order", "reused_object", "l2_friendly_access_order"],
+  "overlap_copy_compute": ["tile_lifetime", "double_buffer_queue", "copy_compute_order", "sync_boundary"],
+  "reduce_gm_traffic": ["repeated_gm_object", "cache_location", "reuse_scope", "final_writeback"],
+  "adjust_ub_layout": ["conflicting_buffer", "stride_or_padding", "capacity_budget", "valid_lanes"],
+  "remove_redundant_casts": ["cast_chain", "retained_dtype", "intermediate_buffer"],
+  "shorten_vector_reduction": ["reduction_stages", "vector_sequence", "cross_tile_merge"],
+  "keep_intermediate_on_chip": ["gm_intermediate", "on_chip_buffer", "producer_consumer_lifetime", "capacity"],
+  "improve_cube_tiling_reuse": ["mnk_tile", "l0_l1_resident_object", "loop_order", "capacity_and_alignment"],
+  "align_batch_writeback": ["writeback_fragments", "contiguous_range", "aligned_batch", "tail"]
+}

@@ -307,7 +307,8 @@ def prepare_custom(name: str, item: dict, project: Path, torch):
 
     sys.path.insert(0, str(project / "CppExtension"))
     extension = importlib.import_module(item["extension_module"])
-    return getattr(extension, item["function"]), custom_args, inputs
+    function = item["function"].split("(", 1)[0].strip()
+    return getattr(extension, function), custom_args, inputs
 
 
 def run_one(name: str, device: int, project_dir: str | None = None) -> None:

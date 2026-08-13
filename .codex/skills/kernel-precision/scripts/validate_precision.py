@@ -258,6 +258,145 @@ def norm(name: str) -> str:
     return re.sub(r"[^a-z0-9]", "", name.lower()).removesuffix("opt")
 
 
+def extension_function_name(function: str) -> str:
+    """Manifest may store either a pybind name or a complete torch schema."""
+    return function.split("(", 1)[0].strip()
+
+
+def extension_parameters(project: Path, function: str) -> list[tuple[str, str]]:
+    """Read the checked-in pybind wrapper signature without modifying it."""
+    source = project / "CppExtension/csrc/op.cpp"
+    text = source.read_text(encoding="utf-8")
+    text = re.sub(r"//[^\n]*|/\*.*?\*/", "", text, flags=re.S)
+    binding = re.search(
+        rf'm\.def\(\s*"{re.escape(function)}"\s*,\s*&([A-Za-z_]\w*)', text, re.S
+    )
+    if binding is None:
+        raise RuntimeError(f"CppExtension 中找不到 pybind 函数 {function!r}")
+    implementation = binding.group(1)
+    declaration = re.search(
+        rf'\b{re.escape(implementation)}\s*\((.*?)\)\s*(?:\{{|;)', text, re.S
+    )
+    if declaration is None:
+        raise RuntimeError(f"CppExtension 中找不到 {implementation!r} 的参数声明")
+    parameter_text = declaration.group(1)
+    result = []
+    for raw in parameter_text.split(","):
+        parameter = raw.strip()
+        match = re.search(r"([A-Za-z_]\w*)\s*$", parameter)
+        if match is None:
+            raise RuntimeError(f"无法解析 C++ 参数：{parameter!r}")
+        result.append((match.group(1), parameter[:match.start(1)].strip()))
+    return result
+
+
+def expected_tensor_shape(project: Path, parameter: str) -> tuple[int, ...] | None:
+    text = (project / "CppExtension/csrc/op.cpp").read_text(encoding="utf-8")
+    match = re.search(
+        rf'"{re.escape(parameter)} must be \[([0-9, ]+)\]', text
+    )
+    if match:
+        return tuple(int(value.strip()) for value in match.group(1).split(","))
+    return None
+
+
+def parameter_variants(parameter: str) -> list[str]:
+    key = norm(parameter)
+    variants = [key]
+    replacements = {
+        "convbiasopt": "convbias", "biasopt": "bias",
+        "lingamma": "linearweight", "linbias": "linearbias",
+        "gngamma": "groupnormweight", "gnbeta": "groupnormbias",
+        "gamma": "groupnormweight", "beta": "groupnormbias",
+        "scaling": "scalingfactor", "scale": "scalefactor",
+        "sub": "subtractvalue", "mul": "multiplyvalue", "c": "constant",
+    }
+    if key in replacements:
+        variants.append(replacements[key])
+    if key == "w":
+        variants.append("weight")
+    elif key == "b":
+        variants.append("bias")
+    elif key.endswith("w"):
+        variants.append(key[:-1] + "weight")
+    elif key.endswith("b"):
+        variants.append(key[:-1] + "bias")
+    return list(dict.fromkeys(variants))
+
+
+def packed_parameter(parameter: str, named: list[tuple[str, object]], inputs: list, project: Path, torch):
+    key = norm(parameter)
+    family = None
+    if key in {"wpacked", "bpacked"}:
+        family = "weight" if key.startswith("w") else "bias"
+    elif key in {"wih", "whh", "bih", "bhh"}:
+        family = {
+            "wih": "weightih", "whh": "weighthh",
+            "bih": "biasih", "bhh": "biashh",
+        }[key]
+    if family:
+        tensors = [value for name, value in named if family in norm(name)]
+        if not tensors:
+            return None
+        if key in {"wih", "whh"}:
+            width = max(tensor.shape[1] for tensor in tensors)
+            padded = []
+            for tensor in tensors:
+                if tensor.shape[1] < width:
+                    pad = torch.zeros(
+                        (tensor.shape[0], width - tensor.shape[1]),
+                        dtype=tensor.dtype, device=tensor.device,
+                    )
+                    tensor = torch.cat((tensor, pad), dim=1)
+                padded.append(tensor)
+            return torch.cat(padded, dim=0).contiguous()
+        return torch.cat([tensor.reshape(-1) for tensor in tensors], dim=0).contiguous()
+    shape = expected_tensor_shape(project, parameter)
+    if key.endswith("buf") and shape:
+        template = next((value for value in inputs if isinstance(value, torch.Tensor)), None)
+        if template is not None:
+            return torch.empty(shape, dtype=template.dtype, device=template.device).contiguous()
+    return None
+
+
+def host_input_dtypes(project: Path) -> dict[str, str]:
+    result = {}
+    for source in (project / "op_host").rglob("*.cpp"):
+        text = source.read_text(encoding="utf-8")
+        for match in re.finditer(
+            r'this->Input\("([^"]+)"\)(.*?)(?=this->(?:Input|Output)\(|\Z)', text, re.S
+        ):
+            dtype = re.search(r"\.DataType\(\{\s*ge::(DT_[A-Z0-9_]+)", match.group(2))
+            if dtype:
+                result[norm(match.group(1))] = dtype.group(1)
+    return result
+
+
+def adapt_argument(value, cpp_type: str, parameter: str, dtypes: dict, inputs: list, torch):
+    is_tensor = "Tensor" in cpp_type
+    if is_tensor and not isinstance(value, torch.Tensor):
+        template = next((item for item in inputs if isinstance(item, torch.Tensor)), None)
+        dtype = template.dtype if template is not None and template.is_floating_point() else torch.float32
+        value = torch.tensor(value, dtype=dtype).npu().contiguous()
+    elif not is_tensor and isinstance(value, torch.Tensor):
+        if value.numel() != 1:
+            raise RuntimeError(f"标量参数 {parameter!r} 收到非标量 Tensor")
+        value = value.item()
+
+    dtype_name = dtypes.get(norm(parameter))
+    dtype_map = {
+        "DT_FLOAT": torch.float32,
+        "DT_FLOAT16": torch.float16,
+        "DT_INT32": torch.int32,
+        "DT_INT64": torch.int64,
+        "DT_BOOL": torch.bool,
+        "DT_UINT8": torch.uint8,
+    }
+    if isinstance(value, torch.Tensor) and dtype_name in dtype_map and value.dtype != dtype_map[dtype_name]:
+        value = value.to(dtype_map[dtype_name]).contiguous()
+    return value
+
+
 def load_python_file(path: Path):
     spec = importlib.util.spec_from_file_location(f"reference_{path.stem}", path)
     module = importlib.util.module_from_spec(spec)
@@ -287,38 +426,80 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     inputs = [to_npu(value, torch) for value in reference.get_inputs()]
 
     forward_names = list(inspect.signature(model.forward).parameters)
-    tensor_values = {norm(key): value for key, value in zip(forward_names, inputs)}
-    tensor_values.update({norm(key): value for key, value in model.named_parameters()})
-    tensor_values.update({norm(key): value for key, value in model.named_buffers()})
+    values = {norm(key): value for key, value in zip(forward_names, inputs)}
+    init_names = [
+        key for key in inspect.signature(reference.Model.__init__).parameters if key != "self"
+    ]
+    values.update({norm(key): value for key, value in zip(init_names, init_args)})
+    for key in init_names:
+        if norm(key) not in values and hasattr(model, key):
+            values[norm(key)] = getattr(model, key)
+    named_parameters = dict(model.named_parameters())
+    named_buffers = dict(model.named_buffers())
+    named_items = list(named_parameters.items()) + list(named_buffers.items())
+    values.update({norm(key): value for key, value in named_parameters.items()})
+    values.update({norm(key): value for key, value in named_buffers.items()})
 
+    aliases = {
+        "self": norm(forward_names[0]) if forward_names else "",
+        "predict": "predictions",
+        "target": "targets",
+        "gamma": "gnweight",
+        "beta": "gnbias",
+        "wdepthwise": "depthwiseweight",
+        "wpointwise": "pointwiseweight",
+    }
+    function = extension_function_name(item["function"])
+    parameters = extension_parameters(project, function)
+    dtypes = host_input_dtypes(project)
     custom_args = []
-    unused_inputs = iter(inputs)
-    for parameter in item["parameters"]:
+    used_named_values = set()
+    for position, (parameter, cpp_type) in enumerate(parameters):
         key = norm(parameter)
-        if key == "self" and inputs:
-            custom_args.append(inputs[0])
-            continue
-        if key in tensor_values:
-            custom_args.append(tensor_values[key])
-            continue
-        matches = {
-            id(value): value
-            for candidate, value in tensor_values.items()
-            if candidate.endswith(key) or key.endswith(candidate)
-        }
-        if len(matches) == 1:
-            custom_args.append(next(iter(matches.values())))
-            continue
-        try:
-            custom_args.append(next(unused_inputs))
-        except StopIteration as error:
+        lookup = aliases.get(key, key)
+        lookup = lookup.removesuffix("double").removesuffix("float")
+        variants = parameter_variants(lookup)
+        value = next((values[candidate] for candidate in variants if candidate in values), None)
+        if value is None:
+            ranked = []
+            for order, (candidate_name, candidate_value) in enumerate(named_items):
+                candidate = norm(candidate_name)
+                if id(candidate_value) in used_named_values:
+                    continue
+                score = max(
+                    (
+                        100 if candidate == variant else
+                        80 if candidate.endswith(variant) else
+                        70 if variant.endswith(candidate) else
+                        0
+                    )
+                    for variant in variants
+                )
+                if key.startswith("conv") and "conv" in candidate:
+                    score += 20
+                if key.startswith("gn") and any(token in candidate for token in ("gn", "groupnorm", "norm")):
+                    score += 20
+                if key.startswith("bn") and any(token in candidate for token in ("bn", "batchnorm")):
+                    score += 20
+                if score:
+                    ranked.append((score, -order, candidate_value))
+            if ranked:
+                ranked.sort(key=lambda item: (item[0], item[1]), reverse=True)
+                value = ranked[0][2]
+                used_named_values.add(id(value))
+        if value is None:
+            value = packed_parameter(parameter, named_items, inputs, project, torch)
+        if value is None and position < len(inputs):
+            value = inputs[position]
+        if value is None:
             raise RuntimeError(
-                f"{name} 的 C++ 参数 {parameter!r} 无法唯一映射，候选数={len(matches)}"
-            ) from error
+                f"{name} 的 C++ 参数 {parameter!r} 无法唯一映射"
+            )
+        custom_args.append(adapt_argument(value, cpp_type, parameter, dtypes, inputs, torch))
 
     sys.path.insert(0, str(project / "CppExtension"))
     extension = importlib.import_module(item["extension_module"])
-    custom = getattr(extension, item["function"])
+    custom = getattr(extension, function)
     return model, inputs, custom, custom_args, reference_path
 
 

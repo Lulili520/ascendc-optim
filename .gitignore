@@ -1,1 +1,6 @@
-kernel_workspace/
+/kernel/
+/kernel_workspace/
+/kernel_workspace_eval/
+/train_result/
+__pycache__/
+*.py[cod]

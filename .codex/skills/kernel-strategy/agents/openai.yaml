@@ -1,4 +1,4 @@
 interface:
   display_name: "Kernel Strategy"
-  short_description: "确定策略 key，并生成可直接落到当前源码的 target/action"
-  default_prompt: "使用 $kernel-strategy 从当前瓶颈确定唯一 strategy_key 和 change_key，并结合当前算子源码生成可执行的 target/action。"
+  short_description: "确定策略 key，并生成源码对应的 target、operation 与 edits"
+  default_prompt: "使用 $kernel-strategy 从当前 bottleneck/cause 确定唯一策略，并生成可实施的 actions。"

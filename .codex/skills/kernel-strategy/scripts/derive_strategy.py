@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Derive one stable strategy key from one confirmed bottleneck report."""
+"""Select one strategy from one confirmed medium-grained cause."""
 
 from __future__ import annotations
 
@@ -8,168 +8,113 @@ import json
 from pathlib import Path
 
 
-STRATEGIES = {
-    "parallel.use_available_cores": ("提高有效并行度", "根据可并行任务数和物理核数增加实际参与计算的核。"),
-    "parallel.balance_tiling": ("均衡多核 Tiling", "将尾块或不同代价任务均匀分配，降低最慢核 cycle。"),
-    "overhead.reduce_launch_cost": ("降低固定开销", "减少小任务下的初始化、栈访问和 Scalar LD/ST 开销。"),
-    "compute.vectorize_reduction": ("标量归约向量化", "将逐元素标量归约改为 Vector Reduce 路径。"),
-    "compute.vectorize_elementwise": ("标量逐元素向量化", "将逐元素标量算术循环映射为 Vector API 链。"),
-    "memory.batch_transfer": ("增大搬运粒度", "合并小粒度搬运，使用连续或批量 DataCopy。"),
-    "memory.improve_l2_reuse": ("改善 L2 复用", "根据数据复用和容量设置 Cache 策略，减少无效 GM 访问。"),
-    "pipeline.double_buffer": ("搬运计算重叠", "在已确认串行的迭代流水中使用双缓冲隐藏搬运延迟。"),
-    "memory.reduce_gm_traffic": ("减少 GM 总流量", "带宽已经饱和时减少搬运总量或提高片上复用。"),
-    "memory.avoid_ub_bank_conflict": ("规避 UB 冲突", "调整 UB 地址、stride 或 padding，降低 bank 冲突。"),
-    "compute.reduce_cast": ("减少类型转换", "合并或消除主路径中的冗余 Cast。"),
-    "compute.low_latency_reduction": ("低延迟 Vector 归约", "对已向量化归约路径选择更低延迟的归约组合。"),
-    "memory.keep_intermediate_in_ub": ("中间结果驻留 UB", "将连续计算链的中间结果保留在 UB，避免 GM 往返。"),
-    "cube.improve_onchip_reuse": ("改善 Cube 片上复用", "提高 L0A、L0B 和 L1 数据驻留与复用。"),
-    "output.align_batch_writeback": ("对齐并合并写回", "改善输出地址对齐和写回粒度。"),
+STRATEGY_DESCRIPTIONS = {
+    "parallel.use_available_cores": "提高有效并行度",
+    "parallel.balance_tiling": "均衡多核任务分配",
+    "overhead.reduce_fixed_cost": "减少热路径固定开销",
+    "compute.vectorize_reduction": "将 Scalar 归约改为 Vector Reduce",
+    "compute.vectorize_elementwise": "将 Scalar 逐元素计算改为 Vector API",
+    "memory.batch_transfer": "合并小粒度搬运",
+    "memory.improve_l2_reuse": "改善 L2 数据复用",
+    "pipeline.double_buffer": "重叠搬运与计算",
+    "memory.reduce_gm_traffic": "减少 GM 总流量",
+    "memory.avoid_ub_bank_conflict": "规避 UB bank 冲突",
+    "compute.reduce_cast": "合并或删除冗余类型转换",
+    "compute.low_latency_reduction": "降低 Vector 归约延迟",
+    "memory.keep_intermediate_in_ub": "让中间结果驻留 UB",
+    "cube.improve_onchip_reuse": "改善 Cube 片上复用",
+    "output.align_batch_writeback": "对齐并合并输出写回",
 }
 
-CHANGES = {
-    "parallel.use_available_cores": (
-        ("core_parallelism.select_used_cores", "按可用核数与独立任务数确定实际用核数。"),
-        ("core_parallelism.cover_all_tasks", "建立核到任务的完整映射。"),
-        ("core_parallelism.handle_tail", "保留尾任务与边界处理。"),
-    ),
-    "parallel.balance_tiling": (
-        ("load_balance.distribute_work", "按计算代价均匀分配主体工作。"),
-        ("load_balance.distribute_remainder", "将余数任务分散到参与计算的核。"),
-        ("load_balance.preserve_coverage", "保证任务无遗漏且不重复。"),
-    ),
-    "overhead.reduce_launch_cost": (
-        ("launch_cost.remove_redundant_init", "删除主路径中的重复初始化。"),
-        ("launch_cost.hoist_invariants", "将循环不变量移出热循环。"),
-        ("launch_cost.reduce_scalar_ldst", "减少可避免的 Scalar 访存。"),
-    ),
-    "compute.vectorize_reduction": (
-        ("vector_reduce.stage_input_in_ub", "将归约输入分块搬入 UB。"),
-        ("vector_reduce.replace_scalar_reduction", "用 Vector Reduce 替换标量归约循环。"),
-        ("vector_reduce.handle_tail", "保持尾块与归约语义正确。"),
-    ),
-    "compute.vectorize_elementwise": (
-        ("vector_elementwise.stage_input_in_ub", "将逐元素输入分块搬入 UB。"),
-        ("vector_elementwise.replace_scalar_loop", "用 Vector API 替换标量逐元素循环。"),
-        ("vector_elementwise.handle_tail", "保持尾块与边界语义正确。"),
-    ),
-    "memory.batch_transfer": (
-        ("batch_transfer.merge_small_copies", "合并连续的小粒度搬运。"),
-        ("batch_transfer.use_contiguous_copy", "使用连续或批量 DataCopy。"),
-        ("batch_transfer.preserve_alignment_tail", "保持对齐和尾块正确。"),
-    ),
-    "memory.improve_l2_reuse": (
-        ("l2_reuse.identify_reused_region", "识别跨核或跨迭代复用的数据区域。"),
-        ("l2_reuse.adjust_cache_policy", "为复用区域设置匹配的 Cache 策略。"),
-        ("l2_reuse.reorder_access_for_locality", "调整访问顺序以改善局部性。"),
-    ),
-    "pipeline.double_buffer": (
-        ("double_buffer.allocate_two_buffers", "为流水迭代分配两组片上缓冲。"),
-        ("double_buffer.restructure_pipeline", "重排搬入、计算和搬出的流水顺序。"),
-        ("double_buffer.recompute_tile_capacity", "按双缓冲容量重新约束 tile。"),
-    ),
-    "memory.reduce_gm_traffic": (
-        ("gm_traffic.keep_intermediate_on_chip", "让可复用中间结果驻留片上。"),
-        ("gm_traffic.remove_redundant_roundtrip", "删除可避免的 GM 往返。"),
-        ("gm_traffic.preserve_capacity_constraints", "保持片上容量约束。"),
-    ),
-    "memory.avoid_ub_bank_conflict": (
-        ("ub_conflict.adjust_layout_or_stride", "调整 UB 布局或访问 stride。"),
-        ("ub_conflict.add_padding_if_needed", "必要时增加最小 padding。"),
-        ("ub_conflict.preserve_capacity_alignment", "保持容量和对齐约束。"),
-    ),
-    "compute.reduce_cast": (
-        ("cast.remove_redundant_cast", "删除结果等价的冗余 Cast。"),
-        ("cast.merge_cast_stages", "合并相邻类型转换阶段。"),
-        ("cast.preserve_compute_dtype", "保持计算与输出 dtype 语义。"),
-    ),
-    "compute.low_latency_reduction": (
-        ("low_latency_reduce.select_instruction_sequence", "选择更低延迟的 Vector 归约组合。"),
-        ("low_latency_reduce.allocate_temporary_buffer", "按指令约束配置临时缓冲。"),
-        ("low_latency_reduce.preserve_tail_semantics", "保持尾块和归约语义。"),
-    ),
-    "memory.keep_intermediate_in_ub": (
-        ("ub_residency.allocate_intermediate_buffer", "为连续计算链分配 UB 中间缓冲。"),
-        ("ub_residency.remove_intermediate_gm_roundtrip", "删除中间结果的 GM 往返。"),
-        ("ub_residency.preserve_buffer_lifetime", "保证缓冲生命周期和复用安全。"),
-    ),
-    "cube.improve_onchip_reuse": (
-        ("cube_reuse.adjust_l0_l1_tiling", "调整 L0/L1 tiling 以支持复用。"),
-        ("cube_reuse.keep_reused_operand_resident", "让复用操作数保持片上驻留。"),
-        ("cube_reuse.preserve_buffer_capacity", "保持各级缓冲容量约束。"),
-    ),
-    "output.align_batch_writeback": (
-        ("writeback.align_output_offset", "对齐输出地址和写回偏移。"),
-        ("writeback.merge_small_writes", "合并连续的小粒度写回。"),
-        ("writeback.handle_tail_padding", "正确处理尾块和 padding。"),
-    ),
+RULES = {
+    "insufficient_parallelism": "parallel.use_available_cores",
+    "uneven_task_distribution": "parallel.balance_tiling",
+    "nonuniform_task_cost": "parallel.balance_tiling",
+    "redundant_hot_path_overhead": "overhead.reduce_fixed_cost",
+    "scalar_address_overhead": "overhead.reduce_fixed_cost",
+    "scalar_reduction": "compute.vectorize_reduction",
+    "scalar_elementwise_compute": "compute.vectorize_elementwise",
+    "inefficient_gm_transfer": "memory.batch_transfer",
+    "low_l2_reuse": "memory.improve_l2_reuse",
+    "serial_copy_compute": "pipeline.double_buffer",
+    "gm_bandwidth_saturation": "memory.reduce_gm_traffic",
+    "ub_bank_conflict": "memory.avoid_ub_bank_conflict",
+    "excessive_cast_chain": "compute.reduce_cast",
+    "high_latency_vector_reduction": "compute.low_latency_reduction",
+    "redundant_gm_roundtrip": "memory.keep_intermediate_in_ub",
+    "low_cube_onchip_reuse": "cube.improve_onchip_reuse",
+    "inefficient_writeback": "output.align_batch_writeback",
+    "inefficient_fixpipe_writeback": "output.align_batch_writeback",
+    "inherent_serial_dependency": None,
 }
 
-RULES = (
-    ("parallel.core_underuse", None, "parallel.use_available_cores"),
-    ("parallel.load_imbalance", None, "parallel.balance_tiling"),
-    ("overhead.small_workload", None, "overhead.reduce_launch_cost"),
-    ("pipeline.scalar_bound", "source.scalar_reduction_loop", "compute.vectorize_reduction"),
-    ("pipeline.scalar_bound", "source.scalar_elementwise_loop", "compute.vectorize_elementwise"),
-    ("pipeline.scalar_bound", "source.init_or_ldst_heavy", "overhead.reduce_launch_cost"),
-    ("pipeline.mte2_bound", "metric.small_transfer", "memory.batch_transfer"),
-    ("pipeline.mte2_bound", "metric.low_l2_hit", "memory.improve_l2_reuse"),
-    ("pipeline.mte2_bound", "source.serial_copy_compute", "pipeline.double_buffer"),
-    ("pipeline.mte2_bound", "metric.bandwidth_saturated", "memory.reduce_gm_traffic"),
-    ("pipeline.vector_bound", "metric.ub_bank_conflict", "memory.avoid_ub_bank_conflict"),
-    ("pipeline.vector_bound", "source.gm_roundtrip", "memory.keep_intermediate_in_ub"),
-    ("pipeline.vector_bound", "metric.excess_cast", "compute.reduce_cast"),
-    ("pipeline.vector_bound", "source.reduction_path", "compute.low_latency_reduction"),
-    ("pipeline.cube_bound", "source.low_onchip_reuse", "cube.improve_onchip_reuse"),
-    ("pipeline.fixp_bound", "source.unaligned_or_small_write", "output.align_batch_writeback"),
-    ("pipeline.mte3_bound", "source.unaligned_or_small_write", "output.align_batch_writeback"),
-)
+OPERATIONS = {
+    "parallel.use_available_cores": "increase_parallelism",
+    "parallel.balance_tiling": "rebalance_task_partition",
+    "overhead.reduce_fixed_cost": "remove_hot_path_overhead",
+    "compute.vectorize_reduction": "replace_scalar_reduction",
+    "compute.vectorize_elementwise": "replace_scalar_elementwise",
+    "memory.batch_transfer": "merge_small_transfers",
+    "memory.improve_l2_reuse": "improve_data_locality",
+    "pipeline.double_buffer": "overlap_copy_compute",
+    "memory.reduce_gm_traffic": "reduce_gm_traffic",
+    "memory.avoid_ub_bank_conflict": "adjust_ub_layout",
+    "compute.reduce_cast": "remove_redundant_casts",
+    "compute.low_latency_reduction": "shorten_vector_reduction",
+    "memory.keep_intermediate_in_ub": "keep_intermediate_on_chip",
+    "cube.improve_onchip_reuse": "improve_cube_tiling_reuse",
+    "output.align_batch_writeback": "align_batch_writeback",
+}
+
+OPERATION_DESCRIPTIONS = {
+    "increase_parallelism": "修改并行上限、blockDim 和任务映射以使用更多可用核",
+    "rebalance_task_partition": "修改任务区间、余数或 logical block 映射以均衡各核工作量",
+    "remove_hot_path_overhead": "外提、缓存、合并或删除热路径内重复固定工作",
+    "replace_scalar_reduction": "用 UB 分块和 Vector Reduce 替代 Scalar 归约循环",
+    "replace_scalar_elementwise": "用连续搬运和 Vector API 替代逐元素 Scalar 计算",
+    "merge_small_transfers": "将频繁小粒度搬运合并为连续或批量搬运",
+    "improve_data_locality": "重排 tile 或数据访问以增加 L2 可复用性",
+    "overlap_copy_compute": "使用分块和双缓冲重叠搬运与计算",
+    "reduce_gm_traffic": "缓存或重用数据以减少 GM 读写总量",
+    "adjust_ub_layout": "调整 UB 缓冲布局、步长或 padding 以规避 bank 冲突",
+    "remove_redundant_casts": "合并或删除主路径中冗余类型转换",
+    "shorten_vector_reduction": "改写 Vector 归约组合以缩短依赖链和归约延迟",
+    "keep_intermediate_on_chip": "使中间结果驻留 UB 或其他片上存储并删除 GM 往返",
+    "improve_cube_tiling_reuse": "修改 Cube tiling 以提高操作数在 L0/L1 的驻留和复用",
+    "align_batch_writeback": "将输出写回调整为对齐、连续或批量形式",
+}
+
+if set(OPERATION_DESCRIPTIONS) != set(OPERATIONS.values()):
+    raise RuntimeError("OPERATION_DESCRIPTIONS 必须覆盖全部 operation")
 
 
 def derive(report: dict) -> dict:
     bottleneck = report.get("bottleneck")
     if bottleneck is None:
-        return {
-            "reasoning": [
-                "证据：bottleneck=null；推断：没有唯一主瓶颈可用于规则匹配。",
-                "证据：策略只能由固定瓶颈规则产生；推断：strategy=null。",
-            ],
-            "strategy": None,
-        }
+        return {"reasoning": [
+            "证据：bottleneck=null；推断：没有可用于策略选择的原因。",
+            "证据：策略必须由固定 cause 规则产生；推断：strategy=null。",
+        ], "strategy": None}
     if not isinstance(bottleneck, dict):
         raise RuntimeError("bottleneck 必须是对象或 null")
-    key = bottleneck.get("bottleneck_key")
-    tags = set(bottleneck.get("evidence_keys", []))
-    for required_key, required_evidence, strategy_key in RULES:
-        if key == required_key and (required_evidence is None or required_evidence in tags):
-            _, description = STRATEGIES[strategy_key]
-            changes = [
-                {
-                    "change_key": change_key,
-                    "target": None,
-                    "action": change_description,
-                }
-                for change_key, change_description in CHANGES[strategy_key]
-            ]
-            matched = "无需附加根因证据" if required_evidence is None else f"evidence_key={required_evidence}"
-            return {
-                "reasoning": [
-                    f"证据：bottleneck_key={key}；推断：进入该主瓶颈的固定策略规则。",
-                    f"证据：{matched}；推断：按固定优先顺序唯一选中 strategy_key={strategy_key}。",
-                    f"证据：strategy_key={strategy_key} 的固定修改契约；推断：必须为 {len(changes)} 个 change_key 补充真实 target 和具体 action。",
-                ],
-                "strategy": {
-                    "strategy_key": strategy_key,
-                    "description": description,
-                    "changes": changes,
-                },
-            }
-    return {
-        "reasoning": [
-            f"证据：bottleneck_key={key}；推断：检查该 key 的固定策略规则。",
-            f"证据：evidence_keys={sorted(tags)} 未满足任何规则；推断：不能可靠生成 strategy_key。",
-        ],
-        "strategy": None,
-    }
+    cause = bottleneck.get("cause_key")
+    if cause not in RULES:
+        raise RuntimeError(f"未知 cause_key：{cause}")
+    strategy_key = RULES[cause]
+    if strategy_key is None:
+        return {"reasoning": [
+            f"证据：cause_key={cause}；推断：该原因没有保持语义的普通优化策略。",
+            "证据：固定策略规则返回空；推断：strategy=null。",
+        ], "strategy": None}
+    return {"reasoning": [
+        f"证据：cause_key={cause}；推断：唯一选择 strategy_key={strategy_key}。",
+        f"证据：当前 cause evidence；推断：按 operation={OPERATIONS[strategy_key]} 补充最少且完整的 targets。",
+    ], "strategy": {"strategy_key": strategy_key, "actions": [{
+        "target": None,
+        "operation": OPERATIONS[strategy_key],
+        "edits": [],
+        "constraints": [],
+    }]}}
 
 
 def main() -> None:
@@ -179,8 +124,7 @@ def main() -> None:
     args = parser.parse_args()
     source = args.project_dir / "bottleneck/bottleneck.json"
     try:
-        report = json.loads(source.read_text(encoding="utf-8"))
-        result = derive(report)
+        result = derive(json.loads(source.read_text(encoding="utf-8")))
     except (OSError, json.JSONDecodeError, RuntimeError) as error:
         raise SystemExit(f"STRATEGY_BLOCKED: {error}") from error
     output = args.output or args.project_dir / "strategy/strategy.json"

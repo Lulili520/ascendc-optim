@@ -1,0 +1,790 @@
+{
+  "workspace_root": "/data/lu/ascendc-optim/kernel_workspace/KernelBench910B",
+  "output": "/data/lu/ascendc-optim/datasets/kernel_policy_data_level1.jsonl",
+  "minimum_reduction_percent_exclusive": 1.0,
+  "candidates": 156,
+  "exported": 0,
+  "excluded": 156,
+  "items": [
+    {
+      "ops": "ArgmaxOverADimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：主 tile 的 valid_len=aligned_len=64"
+    },
+    {
+      "ops": "ArgmaxOverADimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.inefficient_gm_transfer observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ArgminOverADimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：将 x 保持为 AscendC::GlobalTensor<float>，在 Init 中为 64 个 FP32（256B）的单缓冲 VECIN TQue 以及 VECCALC 最小值、索引、候选索引和 Compare uint8 mask 缓冲分配 UB"
+    },
+    {
+      "ops": "ArgminOverADimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.inefficient_gm_transfer observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "AveragePooling1dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "AveragePooling1dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "AveragePooling2dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "AveragePooling3dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "BatchedMatrixMultiplicationCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：将当前 b=bid；b<batch"
+    },
+    {
+      "ops": "BatchedMatrixMultiplicationCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：逐 taskIdx 反解 batchIdx=taskIdx/(mTiles*nTiles)、mTile=(taskIdx/nTiles)%mTiles、nTile=taskIdx%nTiles，并针对该 tile 设置 A/B/C GlobalTensor 后执行一次 Matmul"
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：读取 GetBlockIdx()，把 task=n*C+c 的 [0,4096) 按 quotient=4096/48、remainder=4096%48 做连续商余数分段"
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "第 2 条 reasoning 必须原样引用当前 cause evidence"
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：九段加输出与临时缓冲的总 UB 预算远低于每核 196352B"
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvDepthwiseSeparable2dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvPointwise2dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 不得引用 performance.* 或把性能证据写入 action"
+    },
+    {
+      "ops": "ConvPointwise2dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "strategy_key 与 cause 固定映射不一致"
+    },
+    {
+      "ops": "ConvStandard1dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvStandard1dDilatedStridedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "ConvStandard1dDilatedStridedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：对每个 task 在 ci 循环前计算 rowOffset0=oh*W+ow0 以及 rowOffset1..4=rowOffset0+k*W，fast path 用 xNcBase+rowOffsetK 构造五行地址"
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：令 rowEnd=rowStart+rowCount，并在 bid>=bdim 或 rowStart>=totalRows 时直接返回，同时将 rowEnd 夹到 totalRows"
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：利用现有 row 解码中 oh 最快、其后 od、co 的连续顺序，把同一 co 不变的 wBaseOc 和 315 个 FP32 weight 值提升到每核每 co 作用域"
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "strategy_key 与 cause 固定映射不一致"
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "strategy_key 与 cause 固定映射不一致"
+    },
+    {
+      "ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvStandard3dSquareInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "ConvStandard3dSquareInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 implementation.strategy_key 与父版本策略不一致"
+    },
+    {
+      "ops": "ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvTransposed1dDilatedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "strategy_key 与 cause 固定映射不一致"
+    },
+    {
+      "ops": "ConvTransposed1dDilatedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：把每个 (n,co) 的 outPos 分为边界 [0,12) 与 [131072,131084) 以及所有 5 个 k 均合法的主体 [12,131072)"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：每行只计算一次 n/co/ho、yRowBase、xBaseN、wBaseCo、khBeg/khEnd，再供全部 width tile 复用"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：在 12-wide tileSafe 路径中连续读取 x0..x15 共 16 个合法 FP32 输入，各读取一次并按固定 kw=5 项序更新 acc0..acc11"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelPaddedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelPaddedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelStridedGroupedPaddedDilatedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelStridedGroupedPaddedDilatedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputSquareKernelDilatedPaddedStridedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：对每个有效 (n,ci,ih) 连续 x 行使用 GlobalTensor<float> 到 LocalTensor<float> 的 DataCopy，EnQue 后在 Vector 阶段 DeQue，消费完成再 FreeTensor"
+    },
+    {
+      "ops": "ConvTransposed2dAsymmetricInputSquareKernelDilatedPaddedStridedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvTransposed2dSquareInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：在每个 tile 的 ci 循环前以 xBaseN 和 wBaseCo 初始化 xBaseCi、wBaseCiCo，ci 每轮结束分别递增 X_STRIDE_C 和 W_STRIDE_CI"
+    },
+    {
+      "ops": "ConvTransposed2dSquareInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "ConvTransposed2dSquareInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：由 Kernel 使用运行时 blockDim 计算 baseRows=ROWS/blockDim 和 remainder=ROWS%blockDim"
+    },
+    {
+      "ops": "ConvTransposed2dSquareInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelStridedPaddedGroupedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：每个输出先把 x/weight UB 的完整 aligned_len=192 清零，再仅向 [0, valid_len) 写入通过 id/ih/iw 边界检查的有效配对"
+    },
+    {
+      "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelStridedPaddedGroupedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：在 Process 进入 row/ow 热循环前仅一次获取 productBuf_/workBuf_/resultBuf_ 的 LocalTensor<float> 视图，并作为参数传给 VectorReduceOutput"
+    },
+    {
+      "ops": "ConvTransposed3dAsymmetricInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：保留 totalRows 对 ROWS_TOTAL 的夹取"
+    },
+    {
+      "ops": "ConvTransposed3dAsymmetricInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed3dSquareInputAsymmetricKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed3dSquareInputAsymmetricKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.hot_path.redundant_overhead observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ConvTransposed3dSquareInputSquareKernelCustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "ConvTransposed3dSquareInputSquareKernelCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 不得引用 performance.* 或把性能证据写入 action"
+    },
+    {
+      "ops": "ConvTransposed3dSquareInputSquareKernelPaddedDilatedStridedCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 constraint 包含源码变换，应移入 edits：把 od/oh/ow 奇偶导致的不同有效 tap 代价及 rows 对 48 的余数分散到各核，bid>=rows 时自然空核返回，并保持 int64_t 索引"
+    },
+    {
+      "ops": "ConvTransposed3dSquareInputSquareKernelPaddedDilatedStridedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "CrossEntropyLossCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "CumprodCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：以 rows/usedCores 计算 baseRows 和 rows%usedCores 计算 remainder，并将 usedCores 设为 blockDim，使每个物理 Vector 核至多承接一个 block"
+    },
+    {
+      "ops": "CumprodCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "CumsumCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：每行仅由一个核处理，覆盖 [0,rows) 且无重复，行内 FP32 inclusive cumsum 数学路径不变"
+    },
+    {
+      "ops": "CumsumCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "CumsumExclusiveCustom_0",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "CumsumExclusiveCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.scalar_elementwise_compute observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "CumsumReverseCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "CumsumReverseCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "EluCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "FrobeniusNormCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：接入 GM workspace，使用 AscendC::GetBlockIdx/GetBlockNum 按 base=core*floor(N/C)+min(core,N%C)、len=floor(N/C)+(core<N%C) 建立连续且互不重叠的全覆盖区间"
+    },
+    {
+      "ops": "FrobeniusNormCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：明确每核商余数映射得到的连续 [coreStart, coreStart+coreLength) 是 ComputePartialNorm 与 ScaleRange 两阶段读取的同一复用区域"
+    },
+    {
+      "ops": "GeluCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：所有 Vector count、GM offset 和写回有效长度仍只使用 tileLength_/count"
+    },
+    {
+      "ops": "GeluCustom_1",
+      "eligible": false,
+      "exclusion_reason": "第 2 条 reasoning 必须原样引用当前 cause evidence"
+    },
+    {
+      "ops": "GroupNormCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "HardSigmoidCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "HardTanhCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "InstanceNormCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：引入 tiling/platform/platform_ascendc.h，在 TilingFunc 中用 PlatformAscendC(context->GetPlatformInfo()).GetCoreNum() 取得 ascend910b AI Core 数"
+    },
+    {
+      "ops": "InstanceNormCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "L2NormCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：在 quotient/remainder 映射中把余数行逐一分配给 blockIdx<remainder 的前若干核"
+    },
+    {
+      "ops": "L2NormCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "LayerNormCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：将 xGm 中当前核 rowStart 到 rowStart+rowCount 的完整连续行定义为只读复用区域"
+    },
+    {
+      "ops": "LayerNormCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：在计算 rowStart/rowCount 后，以 uint64_t sliceOffset=rowStart*cols 和 sliceElements=rowCount*cols 将 xGm/yGm 分别绑定到 x/y 的当前核连续行切片"
+    },
+    {
+      "ops": "LeakyReluCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "LogSoftmaxCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MaskedCumsumCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MatmulForLowerTriangularMatricesCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：读取 ascendcPlatform.GetCoreNumAic() 并对非正值回退为 1"
+    },
+    {
+      "ops": "MatmulForLowerTriangularMatricesCustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatmulForSymmetricMatricesCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：GetTiling 成功后计算 mTiles=ceil(M/singleCoreM)、nTiles=ceil(N/singleCoreN) 与 totalTiles"
+    },
+    {
+      "ops": "MatmulForSymmetricMatricesCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：基于重新 tiling 后的 singleCoreM/singleCoreN 重新计算 mTiles、nTiles 和 totalTiles，每个 tile 继续经 CalcOffset 设置 A/B/C 子 tensor，证明 [0,totalTiles) 全覆盖且 residue class 无重复"
+    },
+    {
+      "ops": "MatmulForUpperTriangularMatricesCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：继续使用 128x128 base tile、FP32 ND 输入输出，并由 get_usedCoreNum 决定不超过 min(物理核数, tiler 独立任务数) 的 blockDim，使主体矩形 tile 分散到更多核"
+    },
+    {
+      "ops": "MatmulForUpperTriangularMatricesCustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatmulWithIrregularShapesCustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatmulWithIrregularShapesCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "MatmulWithLargeKDimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "MatmulWithLargeKDimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MatmulWithSmallKDimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "MatmulWithSmallKDimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MatmulWithTransposedACustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatmulWithTransposedACustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatmulWithTransposedBCustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatmulWithTransposedBCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：在 GetTiling 前读取 ascendcPlatform.GetCoreNum()，零值回退 1"
+    },
+    {
+      "ops": "MatmulWithTransposedBothCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：将二维 mTiles*nTiles 展平为 totalTiles，并按 usedCoreNum 为每个 block 分配连续且数量相差最多 1 的 task 区间"
+    },
+    {
+      "ops": "MatmulWithTransposedBothCustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "MatrixScalarMultiplicationCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MatrixVectorMultiplicationCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：用 ascendcPlatform.GetCoreNumAic() 取得可用 Cube 核数，以 M 方向独立 tile 数 ceil(M/baseM) 为任务数，令 usedCores=min(可用 Cube 核数, M tile 数) 且至少为 1"
+    },
+    {
+      "ops": "MatrixVectorMultiplicationCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：读取 ascendcPlatform.GetCoreNumAic()，令 targetCores=min(可用 Cube 核数,M)，动态设置 baseM=ceil(M/targetCores) 和 usedCores=ceil(M/baseM)，再将 baseM 传给 SetFixSplit、usedCores 同步传给 SetDim/SetBlockDim"
+    },
+    {
+      "ops": "MaxPooling1dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "MaxPooling1dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MaxPooling2dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MaxPooling3dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "MaxPooling3dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "MaxReductionOverADimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：每个 tile 定义 validLen=min(1024,innerDim-innerBase)，DataCopyPad 对 1024-validLen lane填充负最大 FP32作为 Max 中性值，Vector count 固定为 1024，MTE3 只写回 validLen*4 字节"
+    },
+    {
+      "ops": "MaxReductionOverADimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：512 个近等成本 tile 在48个物理 Vector核上平均为10或11个任务"
+    },
+    {
+      "ops": "MeanReductionOverADimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：正式performance.hardware.aiv_core_count=48，独立任务outerCount=BATCH*INNER_DIM=524160，因此usedCores=min(48,outerCount)=48"
+    },
+    {
+      "ops": "MeanReductionOverADimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "MinGptNewGeluCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edits 必须包含 1–4 项"
+    },
+    {
+      "ops": "MinGptNewGeluCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "MinReductionOverADimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：保留start=coreId*colsPerCore、end=min(start+colsPerCore,outerCount)映射，并让blockNum=48对应Host usedCores"
+    },
+    {
+      "ops": "MinReductionOverADimensionCustom_1",
+      "eligible": false,
+      "exclusion_reason": "source.kernel.high_latency_vector_reduction observation 只能写源码事实，不得混入指标或收益"
+    },
+    {
+      "ops": "ReluCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "ReluCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "RmsNormCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：保留已有 FP32 Mul/Add/Muls/Adds/Sqrt/Div/Mul Vector API 计算链"
+    },
+    {
+      "ops": "RmsNormCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：将当前 bIdx、innerStart、len 下由 BaseOffset(bIdx,ci,innerStart) 定位的 c 个只读 FP32 连续段定义为复用区域"
+    },
+    {
+      "ops": "SeluCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：继续用 `coreChunk=ceil(totalLength/usedBlocks)`、`coreStart=blockIdx*coreChunk` 和裁剪后的 coreLen 建立 48 核连续半开区间映射，确保每个 FP32 元素由唯一核处理且全部覆盖"
+    },
+    {
+      "ops": "SeluCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "SigmoidCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：继续按运行时 blockNum 计算 coreChunk=ceil(totalLength/blockNum)、coreStart 和裁剪后的 coreLen，使 48 核连续半开区间完整覆盖全部 FP32 元素且无重复"
+    },
+    {
+      "ops": "SigmoidCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "SoftmaxCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 edit 缺少明确变换动作：保留 `startRow=blockIdx*rowsPerCore`、裁剪 endRow 和 rowCount 的连续半开行区间，使 48 核无重叠覆盖 4096 行"
+    },
+    {
+      "ops": "SoftmaxCustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "SoftplusCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 2 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "SoftplusCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "SoftsignCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "SquareMatrixMultiplicationCustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "SquareMatrixMultiplicationCustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "StandardMatrixMultiplicationCustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "StandardMatrixMultiplicationCustom_1",
+      "eligible": false,
+      "exclusion_reason": "action 1 edit 缺少明确变换动作：继续在 GetTiling 后以真实 singleCoreM/N 计算 totalTiles，并令 blockDim=min(coreNum,max(1,totalTiles))，配合 kernel grid-stride 分散余数任务"
+    },
+    {
+      "ops": "SumReductionOverADimensionCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "SwishCustom_0",
+      "eligible": false,
+      "exclusion_reason": "action 1 constraints 必须包含 1–4 项"
+    },
+    {
+      "ops": "SwishCustom_1",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "TallSkinnyMatrixMultiplicationCustom_0",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "TallSkinnyMatrixMultiplicationCustom_1",
+      "eligible": false,
+      "exclusion_reason": "未知或重复 evidence_key：source.host.task_distribution"
+    },
+    {
+      "ops": "TanhCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    },
+    {
+      "ops": "TripletMarginLossCustom_0",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
+    }
+  ]
+}

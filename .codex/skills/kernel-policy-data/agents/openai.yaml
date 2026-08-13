@@ -1,0 +1,4 @@
+interface:
+  display_name: "Kernel Policy Data"
+  short_description: "Export validated AscendC kernel policy datasets"
+  default_prompt: "Use $kernel-policy-data to export validated KernelBench policy training samples."
