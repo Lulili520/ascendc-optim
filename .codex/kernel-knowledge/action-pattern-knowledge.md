@@ -1,16 +1,22 @@
 # AscendC Action 模式知识
 
-按固定 change 特征加载对应章节，用于具体化或 Strategy 校验门禁中的唯一修复轮。模式提供实现契约，不改变 `strategy_key` 或 `change_key[]`。
+按固定 operation 加载对应章节，用于具体化或 Strategy 校验门禁中的统一修复轮。模式提供实现契约，不改变 `strategy_key`。
+
+## 算子模型与分支
+
+生成 action 前先由 shape、axis、dtype 和数学语义建立最小模型。Reduction 合轴后必须区分 AR、ARA 或多轴，再按峰值活跃 Buffer 与可靠 UB 容量选择 FullLoad 或分载；带索引输出再叠加 With-Index 约束。Elementwise、Broadcast、Conversion 和 Cube 同样先确定布局分支，禁止从 pipeline ratio 直接选实现。
+
+模型不增加训练字段，但必须落入相关 action：`pattern=`、`branch=`、容量公式、任务覆盖、对齐、tail 与输出 ABI。固定 tile/chunk 只有在 shape、硬件或 API 对齐直接证明时才允许。
 
 ## Vector reduction 与索引
 
 适用：`vector_reduce.*`、`low_latency_reduce.*`。
 
 - 先判断归约轴在 GM中的连续性和 AR/ARA形态，再决定整段归约或逐行 Compare/Select。
-- ARA索引归约常用极值和索引状态驻留 UB、逐行搬入、Compare+Select更新。
+- ARA索引归约先判断 `R×alignedA0` 能否 FullLoad；不能时按 `peak_bytes<=usable_ub` 反推 `R_chunk`，用 DataCopyPad 的 blockCount/stride 批量搬入多行，极值和索引状态跨 chunk 常驻 UB。每次只搬一行仅在容量或依赖确实限制时成立。
 - 首索引语义：ArgMax使用“输入 <= 旧最大值则保留”，ArgMin使用“输入 >= 旧最小值则保留”；若 action使用严格 GT/LT更新，也必须明确相等时不更新。
-- 索引状态可用 float时，先验证范围；循环行号优先用 float标量累加，输出前使用受支持的 Vector Cast。
-- action必须同时描述 input Queue、极值/索引/mask buffer、Compare对齐、尾块中性padding、同步和输出 ABI。
+- 索引状态可用 float时，先验证范围；循环行号优先用 float标量累加。ARA优先使用反转 Compare 加 Tensor-Scalar Select，避免每行 Duplicate 索引向量；输出前使用当前 SDK 支持的转换路径。
+- action必须同时描述 Host tile/chunk/blockDim、input Queue、极值/索引/mask buffer、全部 API 预留空间、Compare对齐、尾块中性padding、同步和输出 ABI。
 - 分片归约必须在合并局部索引时加片起始偏移，并保持跨片首索引语义。
 
 ## Vector elementwise

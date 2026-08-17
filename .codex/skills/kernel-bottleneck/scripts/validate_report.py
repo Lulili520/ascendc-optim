@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Validate one bottleneck inferred from raw metric and source evidence."""
+"""Validate direct, source-grounded kernel bottleneck reports."""
 
 from __future__ import annotations
 
@@ -12,151 +12,147 @@ from typing import Any
 
 
 BOTTLENECK_DESCRIPTIONS = {
-    "overhead.fixed_cost_bound": "有效工作量不足以摊薄启动、初始化、调度或 Scalar 固定成本",
-    "parallel.core_underuse": "独立任务充足，但对应类型的活跃核明显少于可用核",
-    "parallel.load_imbalance": "多核参与，但慢核工作尾部显著决定总时延",
-    "pipeline.mte2_bound": "搬入流水线是本轮首选执行限制",
-    "pipeline.mte3_bound": "搬出流水线是本轮首选执行限制",
-    "pipeline.cube_bound": "Cube 是本轮首选执行限制",
-    "pipeline.vector_bound": "Vector 是本轮首选执行限制",
-    "pipeline.fixp_bound": "FixPipe 是本轮首选执行限制",
-    "pipeline.scalar_bound": "Scalar 或 ScalarLDST 是本轮首选执行限制",
+    "overhead.hot_path_inefficiency": "热路径包含可消除的重复工作",
+    "tiling.execution_inefficiency": "Host tiling 与真实 Kernel 执行结构不匹配",
+    "parallel.core_underuse": "独立任务没有充分映射到可用核",
+    "parallel.load_imbalance": "参与核之间的任务数量或代价不均",
+    "memory.transfer_inefficiency": "GM 搬运形态、对齐或写回粒度低效",
+    "memory.reuse_inefficiency": "数据或中间量没有按生命周期片上复用",
+    "memory.onchip_conflict": "片上布局造成可规避的访问冲突",
+    "pipeline.overlap_loss": "可并行阶段或槽生命周期导致串行化",
+    "compute.scalar_inefficiency": "可并行主要工作仍由 Scalar 路径承担",
+    "compute.vector_dataflow_inefficiency": "Vector 宽度、物化、转换或中间表示低效",
+    "compute.reduction_inefficiency": "分块归约合并结构低效",
+    "compute.cube_dataflow_inefficiency": "Cube tile、片上复用或 FixPipe 数据流低效",
 }
 
-BOTTLENECK_SELECTION_ORDER = (
-    "overhead.fixed_cost_bound",
-    "parallel.core_underuse",
-    "parallel.load_imbalance",
-)
-PIPELINE_TIE_ORDER = (
-    "pipeline.mte2_bound", "pipeline.cube_bound", "pipeline.vector_bound",
-    "pipeline.fixp_bound", "pipeline.mte3_bound", "pipeline.scalar_bound",
-)
-PIPELINE_TIE_MARGIN_PERCENTAGE_POINTS = 3.0
+# cause_key 必须描述足以唯一决定 strategy 的具体源码机制。
+CAUSES = {
+    "repeated_hot_path_overhead": ("overhead.hot_path_inefficiency", "source.hot_path.redundant_overhead"),
+    "inactive_tiling_parameter": ("tiling.execution_inefficiency", "source.host.inactive_tiling_parameter"),
+    "insufficient_parallelism": ("parallel.core_underuse", "source.host.parallel_mapping"),
+    "uneven_task_distribution": ("parallel.load_imbalance", "source.task_distribution"),
+    "nonuniform_task_cost": ("parallel.load_imbalance", "source.kernel.nonuniform_task_cost"),
+    "overpartitioned_task_mapping": ("overhead.hot_path_inefficiency", "source.host.overpartitioned_mapping"),
+    "inefficient_work_unit_size": ("tiling.execution_inefficiency", "source.host.work_unit_size"),
+    "scalar_global_contiguous_access": ("memory.transfer_inefficiency", "source.kernel.scalar_global_contiguous_access"),
+    "fragmented_contiguous_transfer": ("memory.transfer_inefficiency", "source.kernel.fragmented_contiguous_transfer"),
+    "fragmented_regular_strided_transfer": ("memory.transfer_inefficiency", "source.kernel.fragmented_regular_strided_transfer"),
+    "scalar_irregular_gather_access": ("memory.transfer_inefficiency", "source.kernel.scalar_irregular_gather_access"),
+    "scalar_irregular_scatter_access": ("memory.transfer_inefficiency", "source.kernel.scalar_irregular_scatter_access"),
+    "unaligned_transfer_tail": ("memory.transfer_inefficiency", "source.kernel.unaligned_transfer_tail"),
+    "fragmented_global_writeback": ("memory.transfer_inefficiency", "source.kernel.fragmented_global_writeback"),
+    "atomic_write_contention": ("memory.transfer_inefficiency", "source.kernel.atomic_write_contention"),
+    "repeated_global_transfer": ("memory.reuse_inefficiency", "source.kernel.repeated_global_transfer"),
+    "redundant_gm_roundtrip": ("memory.reuse_inefficiency", "source.kernel.redundant_gm_roundtrip"),
+    "premature_buffer_eviction": ("memory.reuse_inefficiency", "source.kernel.premature_buffer_eviction"),
+    "overextended_buffer_lifetime": ("memory.reuse_inefficiency", "source.kernel.overextended_buffer_lifetime"),
+    "ub_bank_conflict": ("memory.onchip_conflict", "source.kernel.ub_bank_conflict"),
+    "serial_pipeline_stages": ("pipeline.overlap_loss", "source.kernel.serial_pipeline_stages"),
+    "over_synchronization": ("pipeline.overlap_loss", "source.kernel.over_synchronization"),
+    "pipeline_slot_reuse_serialization": ("pipeline.overlap_loss", "source.kernel.pipeline_slot_reuse_serialization"),
+    "recomputed_invariant_scalar_work": ("compute.scalar_inefficiency", "source.hot_path.recomputed_invariant_scalar_work"),
+    "scalar_local_lane_compute": ("compute.scalar_inefficiency", "source.kernel.scalar_local_lane_compute"),
+    "scalar_reduction": ("compute.scalar_inefficiency", "source.kernel.scalar_reduction"),
+    "serial_chunk_reduction": ("compute.reduction_inefficiency", "source.kernel.serial_chunk_reduction"),
+    "scalar_elementwise_compute": ("compute.scalar_inefficiency", "source.kernel.scalar_elementwise_compute"),
+    "redundant_vector_materialization": ("compute.vector_dataflow_inefficiency", "source.kernel.redundant_vector_materialization"),
+    "underutilized_vector_width": ("compute.vector_dataflow_inefficiency", "source.kernel.underutilized_vector_width"),
+    "vector_ub_bouncing": ("compute.vector_dataflow_inefficiency", "source.kernel.vector_ub_bouncing"),
+    "excessive_cast_chain": ("compute.vector_dataflow_inefficiency", "source.kernel.excessive_cast_chain"),
+    "inefficient_cube_tiling": ("compute.cube_dataflow_inefficiency", "source.host.inefficient_cube_tiling"),
+    "low_cube_onchip_reuse": ("compute.cube_dataflow_inefficiency", "source.kernel.low_cube_onchip_reuse"),
+    "mismatched_fixpipe_layout": ("compute.cube_dataflow_inefficiency", "source.kernel.mismatched_fixpipe_layout"),
+    "fragmented_fixpipe_writeback": ("compute.cube_dataflow_inefficiency", "source.kernel.fragmented_fixpipe_writeback"),
+}
 
-# Metric evidence names observations; the source is the exact performance path.
+CAUSE_DESCRIPTIONS = {cause: source.replace("source.", "").replace(".", " ") for cause, (_, source) in CAUSES.items()}
+
 METRIC_SOURCES = {
-    "metric.task.head_overhead_ratio": ("performance.task.head_overhead_ratio",),
-    "metric.core.active_count": ("performance.per_core.active_cores",),
-    "metric.hardware.available_core_count": (
-        "performance.hardware.aic_core_count", "performance.hardware.aiv_core_count",
-    ),
-    "metric.core.imbalance_percent": ("performance.per_core.imbalance_percent",),
-    "metric.pipeline.mte2_ratio": (
-        "performance.pipeline.aic_mte2_ratio", "performance.pipeline.aiv_mte2_ratio",
-    ),
-    "metric.pipeline.mte3_ratio": ("performance.pipeline.aiv_mte3_ratio",),
-    "metric.pipeline.cube_ratio": ("performance.pipeline.aic_mac_ratio",),
-    "metric.pipeline.vector_ratio": ("performance.pipeline.aiv_vec_ratio",),
-    "metric.pipeline.fixpipe_ratio": ("performance.pipeline.aic_fixpipe_ratio",),
-    "metric.pipeline.scalar_ratio": (
-        "performance.pipeline.aic_scalar_ratio", "performance.pipeline.aiv_scalar_ratio",
-    ),
-    "metric.memory.gm_peak_utilization_percent": (
-        "performance.memory.gm_peak_utilization_percent",
-    ),
-    "metric.cache.l2_hit_rate_percent": (
-        "performance.l2_cache.aiv_derived_hit_rate_percent",
-    ),
-    "metric.memory.ub_bank_conflict_ratio": (
+    "performance.task.overhead": ("performance.task.head_overhead_ratio",),
+    "performance.core.active": ("performance.per_core.active_cores",),
+    "performance.core.imbalance": ("performance.per_core.imbalance_percent",),
+    "performance.pipeline.mte2": ("performance.pipeline.aic_mte2_ratio", "performance.pipeline.aiv_mte2_ratio"),
+    "performance.pipeline.mte3": ("performance.pipeline.aiv_mte3_ratio",),
+    "performance.pipeline.cube": ("performance.pipeline.aic_mac_ratio",),
+    "performance.pipeline.vector": ("performance.pipeline.aiv_vec_ratio",),
+    "performance.pipeline.scalar": ("performance.pipeline.aic_scalar_ratio", "performance.pipeline.aiv_scalar_ratio"),
+    "performance.memory.gm": ("performance.memory.gm_peak_utilization_percent",),
+    "performance.cache.l2": ("performance.l2_cache.aiv_derived_hit_rate_percent",),
+    "performance.memory.ub_conflict": (
         "performance.resource_conflict.aiv_vec_bankgroup_cflt_ratio",
         "performance.resource_conflict.aiv_vec_bank_cflt_ratio",
     ),
 }
-
-BOTTLENECK_EVIDENCE = {
-    "overhead.fixed_cost_bound": ("metric.task.head_overhead_ratio",),
-    "parallel.core_underuse": (
-        "metric.core.active_count", "metric.hardware.available_core_count",
-    ),
-    "parallel.load_imbalance": (
-        "metric.core.active_count", "metric.core.imbalance_percent",
-    ),
-    "pipeline.mte2_bound": ("metric.pipeline.mte2_ratio",),
-    "pipeline.mte3_bound": ("metric.pipeline.mte3_ratio",),
-    "pipeline.cube_bound": ("metric.pipeline.cube_ratio",),
-    "pipeline.vector_bound": ("metric.pipeline.vector_ratio",),
-    "pipeline.fixp_bound": ("metric.pipeline.fixpipe_ratio",),
-    "pipeline.scalar_bound": ("metric.pipeline.scalar_ratio",),
-}
-
-# Medium-grained actionable causes. Concrete code shapes remain in observation.
-CAUSES = {
-    "redundant_hot_path_overhead": ("overhead.fixed_cost_bound", "source.hot_path.redundant_overhead"),
-    "scalar_address_overhead": ("pipeline.scalar_bound", "source.hot_path.scalar_address_overhead"),
-    "insufficient_parallelism": ("parallel.core_underuse", "source.host.parallel_mapping"),
-    "uneven_task_distribution": ("parallel.load_imbalance", "source.task_distribution"),
-    "nonuniform_task_cost": ("parallel.load_imbalance", "source.kernel.nonuniform_task_cost"),
-    "inefficient_gm_transfer": ("pipeline.mte2_bound", "source.kernel.inefficient_gm_transfer"),
-    "low_l2_reuse": ("pipeline.mte2_bound", "metric.cache.l2_hit_rate_percent"),
-    "serial_copy_compute": ("pipeline.mte2_bound", "source.kernel.serial_copy_compute"),
-    "gm_bandwidth_saturation": ("pipeline.mte2_bound", "metric.memory.gm_peak_utilization_percent"),
-    "inefficient_writeback": ("pipeline.mte3_bound", "source.kernel.inefficient_writeback"),
-    "low_cube_onchip_reuse": ("pipeline.cube_bound", "source.kernel.low_cube_onchip_reuse"),
-    "ub_bank_conflict": ("pipeline.vector_bound", "metric.memory.ub_bank_conflict_ratio"),
-    "redundant_gm_roundtrip": ("pipeline.vector_bound", "source.kernel.redundant_gm_roundtrip"),
-    "excessive_cast_chain": ("pipeline.vector_bound", "source.kernel.excessive_cast_chain"),
-    "high_latency_vector_reduction": ("pipeline.vector_bound", "source.kernel.high_latency_vector_reduction"),
-    "inefficient_fixpipe_writeback": ("pipeline.fixp_bound", "source.kernel.inefficient_fixpipe_writeback"),
-    "scalar_reduction": ("pipeline.scalar_bound", "source.kernel.scalar_reduction"),
-    "scalar_elementwise_compute": ("pipeline.scalar_bound", "source.kernel.scalar_elementwise_compute"),
-    "inherent_serial_dependency": ("pipeline.scalar_bound", "source.kernel.inherent_serial_dependency"),
-}
-
-CAUSE_DESCRIPTIONS = {
-    "redundant_hot_path_overhead": "热路径存在重复初始化、循环不变量计算或过细资源生命周期",
-    "scalar_address_overhead": "热路径主要消耗在 Scalar 索引展开、除法、取模或地址计算",
-    "insufficient_parallelism": "可并行任务充足，但任务映射没有使用足够物理核",
-    "uneven_task_distribution": "任务数量、余数或执行波次在参与核之间分配不均",
-    "nonuniform_task_cost": "各核任务数量可能相近，但单任务计算代价不同",
-    "inefficient_gm_transfer": "GM 搬运粒度、连续性或调用频率不合理",
-    "low_l2_reuse": "可复用数据未有效命中 L2，造成重复 GM 读取",
-    "serial_copy_compute": "搬入与计算串行执行，缺少有效重叠",
-    "gm_bandwidth_saturation": "GM 搬入带宽接近可信硬件峰值，成为吞吐上限",
-    "inefficient_writeback": "MTE3 输出写回不连续、未对齐或粒度过小",
-    "low_cube_onchip_reuse": "Cube 操作数未在 L0/L1 中有效驻留和复用",
-    "ub_bank_conflict": "UB 地址、布局或步长导致 bank 或 bank group 冲突",
-    "redundant_gm_roundtrip": "连续计算的中间结果不必要地写回 GM 后再读入",
-    "excessive_cast_chain": "主路径存在可合并或消除的连续类型转换",
-    "high_latency_vector_reduction": "已向量化归约仍采用高延迟组合或多阶段路径",
-    "inefficient_fixpipe_writeback": "FixPipe 输出地址、长度或分片不利于高效写回",
-    "scalar_reduction": "使用 Scalar 循环执行归约",
-    "scalar_elementwise_compute": "可向量化的逐元素计算仍由 Scalar 循环完成",
-    "inherent_serial_dependency": "当前元素依赖历史状态，不能直接并行向量化",
-}
-
-CAUSE_PRIORITY = {
-    "overhead.fixed_cost_bound": ("redundant_hot_path_overhead",),
-    "parallel.core_underuse": ("insufficient_parallelism",),
-    "parallel.load_imbalance": ("nonuniform_task_cost", "uneven_task_distribution"),
-    "pipeline.mte2_bound": ("gm_bandwidth_saturation", "inefficient_gm_transfer", "low_l2_reuse", "serial_copy_compute"),
-    "pipeline.mte3_bound": ("inefficient_writeback",),
-    "pipeline.cube_bound": ("low_cube_onchip_reuse",),
-    "pipeline.vector_bound": ("ub_bank_conflict", "redundant_gm_roundtrip", "excessive_cast_chain", "high_latency_vector_reduction"),
-    "pipeline.fixp_bound": ("inefficient_fixpipe_writeback",),
-    "pipeline.scalar_bound": ("inherent_serial_dependency", "scalar_address_overhead", "scalar_reduction", "scalar_elementwise_compute"),
-}
-
-SOURCE_EVIDENCE = {item[1] for item in CAUSES.values() if item[1].startswith("source.")}
+SOURCE_EVIDENCE = {source for _, source in CAUSES.values()}
 EVIDENCE_KEYS = set(METRIC_SOURCES) | SOURCE_EVIDENCE
-BOTTLENECK_FIELDS = {"bottleneck_key", "cause_key"}
+BOTTLENECK_EVIDENCE = {key: () for key in BOTTLENECK_DESCRIPTIONS}
 
-if set(CAUSE_DESCRIPTIONS) != set(CAUSES):
-    raise RuntimeError("CAUSE_DESCRIPTIONS 必须与 CAUSES 完整对应")
-if {cause for ordered in CAUSE_PRIORITY.values() for cause in ordered} != set(CAUSES):
-    raise RuntimeError("CAUSE_PRIORITY 必须覆盖且仅覆盖全部 CAUSES")
+SOURCE_ANCHORS = {
+    "scalar_global_contiguous_access": ("GetValue", "SetValue"),
+    "scalar_irregular_gather_access": ("GetValue",),
+    "scalar_irregular_scatter_access": ("SetValue",),
+    "scalar_local_lane_compute": ("GetValue", "SetValue"),
+    "over_synchronization": ("PipeBarrier", "SyncAll", "WaitFlag", "SetFlag"),
+    "redundant_vector_materialization": ("Duplicate",),
+    "atomic_write_contention": ("Atomic",),
+    "excessive_cast_chain": ("Cast",),
+    "mismatched_fixpipe_layout": ("Fixpipe", "FixPipe"),
+    "fragmented_fixpipe_writeback": ("Fixpipe", "FixPipe"),
+}
+
+# 同一 symbol 上这些 cause 是同一机制的不同具体分类，必须只保留一个根因。
+EXCLUSIVE_CAUSE_GROUPS = (
+    {"inefficient_work_unit_size", "fragmented_contiguous_transfer", "underutilized_vector_width"},
+    {"scalar_global_contiguous_access", "fragmented_contiguous_transfer"},
+    {"fragmented_contiguous_transfer", "fragmented_regular_strided_transfer"},
+    {"serial_pipeline_stages", "pipeline_slot_reuse_serialization"},
+    {"scalar_local_lane_compute", "scalar_elementwise_compute"},
+    {"premature_buffer_eviction", "repeated_global_transfer"},
+    {"mismatched_fixpipe_layout", "fragmented_fixpipe_writeback"},
+)
 
 
-def read_path(root: dict[str, Any], source: str) -> Any:
+def _mask_comments_and_strings(text: str) -> str:
+    pattern = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', re.S)
+    return pattern.sub(lambda match: "".join("\n" if c == "\n" else " " for c in match.group()), text)
+
+
+def _matching_brace(masked: str, opening: int) -> int:
+    depth = 0
+    for position in range(opening, len(masked)):
+        if masked[position] == "{":
+            depth += 1
+        elif masked[position] == "}":
+            depth -= 1
+            if depth == 0:
+                return position + 1
+    raise RuntimeError("源码 symbol 花括号不闭合")
+
+
+def _symbol_bodies(text: str, symbol: str) -> list[str]:
+    name = re.escape(symbol.rsplit("::", 1)[-1])
+    masked = _mask_comments_and_strings(text)
+    matches = list(re.finditer(rf"\b{name}\s*\([^;{{}}]*\)[^;{{}}]*\{{", masked, re.S))
+    if not matches:
+        raise RuntimeError(f"源码 symbol 无法定位到函数体：{symbol}")
+    bodies = []
+    for match in matches:
+        opening = masked.find("{", match.start())
+        bodies.append(text[match.start():_matching_brace(masked, opening)])
+    return bodies
+
+
+def _read_path(root: dict[str, Any], path: str) -> Any:
     value: Any = root
-    for part in source.split(".")[1:]:
+    for part in path.split(".")[1:]:
         if not isinstance(value, dict) or part not in value:
-            raise RuntimeError(f"performance 中不存在字段：{source}")
+            raise RuntimeError(f"performance 中不存在字段：{path}")
         value = value[part]
     return value
 
 
-def load_performance(report_path: Path) -> dict[str, Any]:
+def _load_performance(report_path: Path) -> dict[str, Any]:
     path = report_path.resolve().parent.parent / "performance/performance.json"
     try:
         value = json.loads(path.read_text(encoding="utf-8"))
@@ -167,40 +163,23 @@ def load_performance(report_path: Path) -> dict[str, Any]:
     return value
 
 
-def pipeline_ratios(performance: dict[str, Any]) -> dict[str, float]:
-    paths = {
-        "pipeline.mte2_bound": ("performance.pipeline.aic_mte2_ratio", "performance.pipeline.aiv_mte2_ratio"),
-        "pipeline.mte3_bound": ("performance.pipeline.aiv_mte3_ratio",),
-        "pipeline.cube_bound": ("performance.pipeline.aic_mac_ratio",),
-        "pipeline.vector_bound": ("performance.pipeline.aiv_vec_ratio",),
-        "pipeline.fixp_bound": ("performance.pipeline.aic_fixpipe_ratio",),
-        "pipeline.scalar_bound": ("performance.pipeline.aic_scalar_ratio", "performance.pipeline.aiv_scalar_ratio"),
-    }
-    result = {}
-    for key, sources in paths.items():
-        values = [read_path(performance, source) for source in sources]
-        if any(not isinstance(value, (int, float)) or not math.isfinite(value) for value in values):
-            raise RuntimeError(f"{key} 的流水线 ratio 无效")
-        result[key] = max(float(value) for value in values)
-    return result
-
-
-def derive_pipeline(performance: dict[str, Any]) -> str | None:
-    ratios = pipeline_ratios(performance)
-    maximum = max(ratios.values())
-    candidates = []
-    for key, ratio in ratios.items():
-        formal = ratio > 0.8
-        if key in {"pipeline.mte2_bound", "pipeline.cube_bound"}:
-            formal = formal or (ratio > 0.7 and sum(value == maximum for value in ratios.values()) == 1)
-        if formal:
-            candidates.append(key)
-    if not candidates:
-        return None
-    candidates.sort(key=lambda key: (-ratios[key], PIPELINE_TIE_ORDER.index(key)))
-    top = candidates[0]
-    near = [key for key in candidates if (ratios[top] - ratios[key]) * 100 <= PIPELINE_TIE_MARGIN_PERCENTAGE_POINTS]
-    return min(near, key=PIPELINE_TIE_ORDER.index)
+def _validate_source(project: Path, key: str, cause: str, source: str) -> None:
+    if "::" not in source:
+        raise RuntimeError("源码 evidence 必须使用 相对文件::符号")
+    relative, symbol = source.split("::", 1)
+    path = (project / relative).resolve()
+    if not relative.startswith(("op_host/", "op_kernel/")) or not path.is_relative_to(project.resolve()) or not path.is_file():
+        raise RuntimeError(f"源码 evidence 文件不存在或越界：{relative}")
+    if key.startswith("source.host.") and not relative.startswith("op_host/"):
+        raise RuntimeError(f"{key} 只能引用 op_host：{relative}")
+    if key.startswith(("source.kernel.", "source.hot_path.")) and not relative.startswith("op_kernel/"):
+        raise RuntimeError(f"{key} 只能引用 op_kernel：{relative}")
+    if not symbol.strip():
+        raise RuntimeError(f"源码 evidence 符号不存在：{source}")
+    bodies = _symbol_bodies(path.read_text(encoding="utf-8", errors="replace"), symbol)
+    anchors = SOURCE_ANCHORS.get(cause)
+    if anchors and not any(anchor in body for body in bodies for anchor in anchors):
+        raise RuntimeError(f"{cause} 的 target 缺少源码锚点：{'/'.join(anchors)}")
 
 
 def validate(path: Path) -> None:
@@ -208,100 +187,71 @@ def validate(path: Path) -> None:
         report = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, json.JSONDecodeError) as error:
         raise RuntimeError(f"无法读取报告：{error}") from error
-    if set(report) != {"reasoning", "evidence", "bottleneck"}:
-        raise RuntimeError("报告只能包含 reasoning、evidence、bottleneck")
-    reasoning = report["reasoning"]
-    if not isinstance(reasoning, list) or len(reasoning) != 2:
-        raise RuntimeError("reasoning 必须固定包含 2 条记录")
-    if any(not isinstance(item, str) or "证据：" not in item or "推断：" not in item for item in reasoning):
-        raise RuntimeError("reasoning 每项必须使用“证据：…；推断：…”格式")
-    evidence = report["evidence"]
-    if not isinstance(evidence, list):
-        raise RuntimeError("evidence 必须是数组")
-    if len(evidence) > 4:
-        raise RuntimeError("evidence 最多保留 4 条必要证据")
-    performance = load_performance(path)
-    indexed = {}
-    for item in evidence:
-        if not isinstance(item, dict) or set(item) != {"evidence_key", "source", "observation"}:
-            raise RuntimeError("每条 evidence 必须包含 evidence_key、source、observation")
-        if any(not isinstance(item[field], str) or not item[field].strip() for field in item):
-            raise RuntimeError("evidence 字段必须是非空字符串")
-        key, source = item["evidence_key"], item["source"]
-        if key not in EVIDENCE_KEYS or key in indexed:
-            raise RuntimeError(f"未知或重复 evidence_key：{key}")
-        if key.startswith("metric."):
-            if source not in METRIC_SOURCES[key]:
-                raise RuntimeError(f"{key} 不能引用 {source}")
-            value = read_path(performance, source)
-            if not isinstance(value, (int, float)) or not math.isfinite(value):
-                raise RuntimeError(f"{source} 不是有限数值")
-            if str(value) not in item["observation"]:
-                raise RuntimeError(f"{key} 的 observation 必须包含原始值 {value}")
-        elif not source.startswith(("op_host/", "op_kernel/")):
-            raise RuntimeError(f"{key} 必须引用 op_host/ 或 op_kernel/")
-        else:
-            if "::" not in source:
-                raise RuntimeError(f"{key} 的 source 必须使用 相对文件::符号")
-            relative, symbol = source.split("::", 1)
-            if not symbol.strip():
-                raise RuntimeError(f"{key} 的源码符号不能为空")
-            source_path = path.resolve().parent.parent / relative
-            if not source_path.is_file():
-                raise RuntimeError(f"源码 evidence 文件不存在：{relative}")
-            symbol_leaf = symbol.rsplit("::", 1)[-1]
-            if symbol_leaf not in source_path.read_text(encoding="utf-8", errors="replace"):
-                raise RuntimeError(f"源码 evidence 符号不存在：{source}")
-            observation_lower = item["observation"].lower()
-            forbidden = ("performance.", "task duration", "head overhead", "ratio", "cycle", "收益")
-            has_percent_metric = re.search(r"\d(?:\.\d+)?\s*%", item["observation"]) is not None
-            if any(token in observation_lower for token in forbidden) or has_percent_metric:
-                raise RuntimeError(f"{key} observation 只能写源码事实，不得混入指标或收益")
-        indexed[key] = item
-    bottleneck = report["bottleneck"]
-    if bottleneck is None:
-        if evidence:
-            raise RuntimeError("bottleneck=null 时 evidence 必须为空")
-        return
-    if not isinstance(bottleneck, dict) or set(bottleneck) != BOTTLENECK_FIELDS:
-        raise RuntimeError("bottleneck 只能包含 bottleneck_key、cause_key")
-    key, cause = bottleneck["bottleneck_key"], bottleneck["cause_key"]
-    if key not in BOTTLENECK_EVIDENCE or cause not in CAUSES:
-        raise RuntimeError("未知 bottleneck_key 或 cause_key")
-    parent, cause_evidence = CAUSES[cause]
-    if parent != key:
-        raise RuntimeError(f"{cause} 不属于 {key}")
-    for required in (*BOTTLENECK_EVIDENCE[key], cause_evidence):
-        if required not in indexed:
-            raise RuntimeError(f"{key}+{cause} 缺少必要原始证据 {required}")
-    if key == "parallel.core_underuse":
-        active = read_path(performance, indexed["metric.core.active_count"]["source"])
-        available = read_path(performance, indexed["metric.hardware.available_core_count"]["source"])
-        if active >= available:
-            raise RuntimeError("active core 不少于 available core，不能认定 core_underuse")
-    if key == "parallel.load_imbalance":
-        active = read_path(performance, indexed["metric.core.active_count"]["source"])
-        imbalance = read_path(performance, indexed["metric.core.imbalance_percent"]["source"])
-        if active <= 1 or imbalance <= 30:
-            raise RuntimeError("load_imbalance 必须满足 active_cores>1 且 imbalance_percent>30")
-    if key.startswith("pipeline."):
-        derived = derive_pipeline(performance)
-        if derived != key:
-            raise RuntimeError(f"流水线原始 ratio 推导结果为 {derived}，不是 {key}")
-    text = "\n".join(reasoning)
-    for token in (*indexed, key, cause):
-        if token not in text:
-            raise RuntimeError(f"reasoning 未引用 {token}")
-    for evidence_key, item in indexed.items():
-        if evidence_key.startswith("metric."):
-            value = read_path(performance, item["source"])
-            if str(value) not in text:
-                raise RuntimeError(f"reasoning 未引用 {evidence_key} 的原始值 {value}")
-    metric_required = BOTTLENECK_EVIDENCE[key]
-    if any(token not in reasoning[0] for token in metric_required) or f"bottleneck_key={key}" not in reasoning[0]:
-        raise RuntimeError("第 1 条 reasoning 必须只完成必要正式指标到 bottleneck 的推断")
-    if cause_evidence not in reasoning[1] or f"cause_key={cause}" not in reasoning[1]:
-        raise RuntimeError("第 2 条 reasoning 必须完成直接原因 evidence 到 cause 的推断")
+    if not isinstance(report, dict) or set(report) != {"reasoning", "issues"}:
+        raise RuntimeError("报告只能包含 reasoning、issues")
+    reasoning, issues = report["reasoning"], report["issues"]
+    if not isinstance(reasoning, list) or any(not isinstance(x, str) or not x.strip() for x in reasoning):
+        raise RuntimeError("reasoning 必须是非空文本数组")
+    if not isinstance(issues, list):
+        raise RuntimeError("issues 必须是数组")
+    if len(reasoning) != (len(issues) if issues else 1):
+        raise RuntimeError("reasoning 必须与 issues 逐项对应；无问题时保留一条终止说明")
+
+    performance = _load_performance(path)
+    project = path.resolve().parent.parent
+    seen_causes: set[str] = set()
+    cause_sources: dict[str, set[str]] = {}
+    for number, issue in enumerate(issues, 1):
+        if not isinstance(issue, dict) or set(issue) != {"evidence", "bottleneck"}:
+            raise RuntimeError(f"issue {number} 只能包含 evidence、bottleneck")
+        bottleneck = issue["bottleneck"]
+        if not isinstance(bottleneck, dict) or set(bottleneck) != {"bottleneck_key", "cause_key"}:
+            raise RuntimeError(f"issue {number} bottleneck 字段非法")
+        cause = bottleneck["cause_key"]
+        if cause not in CAUSES or cause in seen_causes:
+            raise RuntimeError(f"issue {number} cause 未知或重复：{cause}")
+        seen_causes.add(cause)
+        if bottleneck["bottleneck_key"] != CAUSES[cause][0]:
+            raise RuntimeError(f"issue {number} bottleneck 与 cause 固定映射不一致")
+        evidence = issue["evidence"]
+        if not isinstance(evidence, list) or not 1 <= len(evidence) <= 4:
+            raise RuntimeError(f"issue {number} evidence 必须包含 1–4 条")
+        keys: set[str] = set()
+        sources: set[str] = set()
+        for item in evidence:
+            if not isinstance(item, dict) or set(item) != {"evidence_key", "source", "observation"}:
+                raise RuntimeError(f"issue {number} evidence 字段非法")
+            if any(not isinstance(item[k], str) or not item[k].strip() for k in item):
+                raise RuntimeError(f"issue {number} evidence 字段必须非空")
+            key, source = item["evidence_key"], item["source"]
+            if key not in EVIDENCE_KEYS or key in keys:
+                raise RuntimeError(f"issue {number} evidence key 未知或重复：{key}")
+            keys.add(key)
+            if key.startswith("source."):
+                _validate_source(project, key, cause, source)
+                sources.add(source)
+                if re.search(r"performance\.|ratio|cycle|Task Duration|收益|%", item["observation"], re.I):
+                    raise RuntimeError("源码 observation 不得混入性能结论")
+            else:
+                if source not in METRIC_SOURCES[key]:
+                    raise RuntimeError(f"{key} 不能引用 {source}")
+                value = _read_path(performance, source)
+                if not isinstance(value, (int, float)) or not math.isfinite(value):
+                    raise RuntimeError(f"{source} 不是有限数值")
+        required_source = CAUSES[cause][1]
+        if required_source not in keys:
+            raise RuntimeError(f"issue {number} 缺少直接源码证据：{required_source}")
+        symbols = [source.rsplit("::", 1)[-1] for source in sources]
+        if not any(symbol in reasoning[number - 1] for symbol in symbols):
+            raise RuntimeError(f"issue {number} reasoning 未引用源码 symbol")
+        cause_sources[cause] = sources
+
+    for group in EXCLUSIVE_CAUSE_GROUPS:
+        present = [cause for cause in group if cause in cause_sources]
+        for index, left in enumerate(present):
+            for right in present[index + 1:]:
+                if cause_sources[left] & cause_sources[right]:
+                    raise RuntimeError(f"同一源码机制不得重复归因：{left}/{right}")
 
 
 def main() -> None:
@@ -311,7 +261,7 @@ def main() -> None:
     try:
         validate(args.report)
     except RuntimeError as error:
-        raise SystemExit(f"INVALID_BOTTLENECK_REPORT: {error}") from error
+        raise SystemExit(f"INVALID_BOTTLENECK: {error}") from error
     print(f"valid={args.report.resolve()}")
 
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "Kernel Implementation"
-  short_description: "按 actions 的 target、operation 与 edits 忠实实施 AscendC 策略"
-  default_prompt: "使用 $kernel-implementation 按 strategy.json 的 actions 修改工作区算子源码，生成 implementation.json，并执行精度和性能验证。"
+  short_description: "按顺序忠实实施全部 AscendC 问题策略"
+  default_prompt: "使用 $kernel-implementation 按 strategy.json 的全部有序 strategies/actions 修改工作区算子源码，生成 implementation.json，并执行源码、精度和性能验证。"

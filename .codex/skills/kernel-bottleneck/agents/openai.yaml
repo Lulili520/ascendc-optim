@@ -1,4 +1,4 @@
 interface:
   display_name: "Kernel Bottleneck"
-  short_description: "使用稳定 key 认定 AscendC 单算子瓶颈与证据链"
-  default_prompt: "使用 $kernel-bottleneck 从正式性能和源码证据确定唯一 bottleneck_key 与 bottleneck_cause_key。"
+  short_description: "直接从完整源码认定具体且排他的性能根因"
+  default_prompt: "使用 $kernel-bottleneck 直接分析完整 Host/Kernel 源码，输出能唯一决定 strategy 的具体 cause；不生成 coverage 或 source model。"

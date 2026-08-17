@@ -1,26 +1,14 @@
 ---
 name: kernel-strategy
-description: 根据 kernel-bottleneck 的唯一 bottleneck_key、cause_key 和证据选择唯一 strategy_key，并结合当前 AscendC 源码生成 target、operation、edits、constraints。用户要求选择优化策略、生成策略训练数据或校验瓶颈到策略推导时使用；不重新诊断瓶颈、不修改源码、不执行优化。
+description: 将 kernel-bottleneck 已排序的具体 cause_key 确定性映射为唯一 strategy_key 和 operation，再生成当前源码原子 actions；保持依赖顺序并覆盖所有问题，不重新诊断、不修改源码、不执行优化。
 ---
 
 # Kernel Strategy
 
-目标：回答“针对已确认原因，采用什么策略，并对当前源码具体改什么”。
+1. 校验 `bottleneck/bottleneck.json`。
+2. 用 `scripts/derive_strategy.py` 按原顺序执行 `cause_key → 唯一 strategy_key → 唯一 operation`；`strategies[]` 必须与 `issues[]` 一一对应，不在本阶段选择候选方向。
+3. 按 [action-contract.md](references/action-contract.md) 为每个 cause 生成必要的最少 actions；同一 strategy 不混入其他 cause，但全部 strategies 共同覆盖当前版本所有确定问题。若前项会改变后项 target 或公式，在 action 中使用修改后的共同目标结构，禁止删除后项。
+4. 仅在 ABI/数学语义必然破坏、API/dtype 明确禁止或容量公式无解时写 `strategy/blocking.json`；其余不确定性交给实施和编译。
+5. 运行 `scripts/validate_strategy.py`，统一修复一轮结构、容量、对齐、覆盖、流水或 dtype 路径问题后复检。
 
-## 流程
-
-1. 完整阅读 [references/strategy-method.md](references/strategy-method.md)、[references/action-contract.md](references/action-contract.md) 和 [references/operation-slots.json](references/operation-slots.json)；具体化和硬阻断时再读 [references/strategy-validation.md](references/strategy-validation.md)。
-2. 运行 `derive_strategy.py --project-dir <version>`，按 cause 确定唯一 `strategy_key`。
-3. 先从源码 symbol 索引定位候选，再阅读对应实现；按 operation 固定槽位生成 1–4 个最少且完整的 `actions`。每项包含真实 `target`、固定 `operation`、1–4 条中粒度 `edits` 和 1–4 条必要 `constraints`。
-4. 做一次统一检查；普通问题最多统一修复一轮，不能更换 `strategy_key` 或混入第二策略。
-5. 写入 `strategy/strategy.json`，运行 `validate_strategy.py`。
-
-## 固定边界
-
-- 推导链固定为：`bottleneck_key + cause_key → strategy_key → actions[]`。
-- `strategy_key` 是稳定优化方向；具体技术模式、边界和实现细节全部进入 action 文本。
-- 未命中策略、策略不适用或存在规范硬阻断时输出 `strategy:null`，不得临时补选。
-- `strategy` 只包含 `strategy_key` 和 `actions`。每个 action 的 `edits` 只写当前源码变换，`constraints` 只写 dtype、索引、容量、对齐、tail、同步或数学语义边界；不重复通用知识。
-- 相同 `target + operation` 必须合并为一个 action，禁止保留固定三步模板。
-- 每条 edit 固定写成 `<源码对象>：<明确变换；必要参数>`；禁止只翻译 operation。`constraints` 只写修改后不变式；不得互换，不得引用 `performance.*` 或收益。
-- reasoning 固定两条，第二条只引用当前 cause evidence 的 key、source，并连接全部 target 与 operation；不复制 observation。
+不重新诊断、预测收益或修改 bottleneck。

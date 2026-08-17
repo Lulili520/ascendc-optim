@@ -1,71 +1,115 @@
-# Bottleneck 与 Cause
+# 直接源码瓶颈分析与确定 Cause
 
-## 决策链
+## 推理链
 
 ```text
-原始 performance/source evidence
-→ fixed cost
-→ core underuse
-→ load imbalance
-→ 正式 pipeline candidate
-→ 无支持候选则 bottleneck=null
+shape/dtype/数学语义
+→ 完整 Host/Kernel 执行路径
+→ 具体且排他的源码根因
+→ 可选 performance 影响证据
+→ bottleneck_key + cause_key
 ```
 
-`evidence_key` 表示可复核事实，`bottleneck_key` 表示哪里受限，`cause_key` 表示为什么受限。禁止用 `metric.*_bound` 作为 evidence。
+直接阅读源码并输出问题，不生成 coverage、source model 或候选处置文件。performance 只补充影响、排序和因果一致性；禁止从最高 pipeline ratio 或固定阈值直接产生 cause。
 
-## Bottleneck
+`bottleneck_key` 是问题域，`cause_key` 是已经足以唯一决定修改方向的具体源码机制。若同一 cause 还需要在多个 strategy 中选择，必须在本阶段继续拆分 cause。
 
-| bottleneck_key | 必要原始指标 |
+## 分析顺序
+
+1. 从 shape、axis、dtype 和数学语义理解当前执行分支；Reduction 区分 AR/ARA、多轴、FullLoad/Chunked 和 With-Index。
+2. 跟踪 Host tiling、blockDim、参数传递与 Kernel 消费。
+3. 跟踪 task 到输出区间的映射、余数、波次和单任务代价。
+4. 跟踪 CopyIn/CopyOut 的连续性、跨步关系、粒度、对齐与 tail。
+5. 跟踪 Scalar、Vector、Reduction、Cube 和 FixPipe 主路径。
+6. 跟踪 Queue/TBuf 生命周期、片上布局、同步和流水 prologue/steady/epilogue。
+7. 合并同一源码机制，只保留能够唯一决定 strategy 的根因。
+
+## Cause 体系
+
+| bottleneck_key | cause_key |
 |---|---|
-| `overhead.fixed_cost_bound` | `metric.task.head_overhead_ratio` |
-| `parallel.core_underuse` | `metric.core.active_count`、`metric.hardware.available_core_count` |
-| `parallel.load_imbalance` | `metric.core.active_count`、`metric.core.imbalance_percent` |
-| `pipeline.mte2_bound` | `metric.pipeline.mte2_ratio` |
-| `pipeline.mte3_bound` | `metric.pipeline.mte3_ratio` |
-| `pipeline.cube_bound` | `metric.pipeline.cube_ratio` |
-| `pipeline.vector_bound` | `metric.pipeline.vector_ratio` |
-| `pipeline.fixp_bound` | `metric.pipeline.fixpipe_ratio` |
-| `pipeline.scalar_bound` | `metric.pipeline.scalar_ratio` |
+| `overhead.hot_path_inefficiency` | `repeated_hot_path_overhead`、`overpartitioned_task_mapping` |
+| `tiling.execution_inefficiency` | `inactive_tiling_parameter`、`inefficient_work_unit_size` |
+| `parallel.core_underuse` | `insufficient_parallelism` |
+| `parallel.load_imbalance` | `uneven_task_distribution`、`nonuniform_task_cost` |
+| `memory.transfer_inefficiency` | `scalar_global_contiguous_access`、`fragmented_contiguous_transfer`、`fragmented_regular_strided_transfer`、`scalar_irregular_gather_access`、`scalar_irregular_scatter_access`、`unaligned_transfer_tail`、`fragmented_global_writeback`、`atomic_write_contention` |
+| `memory.reuse_inefficiency` | `repeated_global_transfer`、`redundant_gm_roundtrip`、`premature_buffer_eviction`、`overextended_buffer_lifetime` |
+| `memory.onchip_conflict` | `ub_bank_conflict` |
+| `pipeline.overlap_loss` | `serial_pipeline_stages`、`over_synchronization`、`pipeline_slot_reuse_serialization` |
+| `compute.scalar_inefficiency` | `recomputed_invariant_scalar_work`、`scalar_local_lane_compute`、`scalar_reduction`、`scalar_elementwise_compute` |
+| `compute.reduction_inefficiency` | `serial_chunk_reduction` |
+| `compute.vector_dataflow_inefficiency` | `redundant_vector_materialization`、`underutilized_vector_width`、`vector_ub_bouncing`、`excessive_cast_chain` |
+| `compute.cube_dataflow_inefficiency` | `inefficient_cube_tiling`、`low_cube_onchip_reuse`、`mismatched_fixpipe_layout`、`fragmented_fixpipe_writeback` |
 
-MTE2/Cube ratio >80%，或唯一最大且 >70% 时成为正式候选；其余流水线 ratio >80% 时成为候选。多个候选先取最大值，前两名相差不超过 3 个百分点时按 `MTE2 → Cube → Vector → FixPipe → MTE3 → Scalar` 选择。
+## 搬运 Cause 排他边界
 
-Core underuse 还需证明独立任务充足且没有数学串行限制。Load imbalance 要求 active cores >1、imbalance >30%，并由任务映射解释。Fixed cost 必须证明固定路径主导，不能仅凭源码中存在初始化就成立。
+- 连续 GM 区间由 `GetValue/SetValue` 逐元素访问：`scalar_global_contiguous_access`。
+- 已使用搬运 API，但连续区间被拆成多次小搬运：`fragmented_contiguous_transfer`。
+- 循环地址满足固定 `blockLen + srcStride/dstStride`：`fragmented_regular_strided_transfer`。
+- 地址由数据索引决定且是读取：`scalar_irregular_gather_access`。
+- 地址由数据索引决定且是写入：`scalar_irregular_scatter_access`。
+- 主体搬运合理，只有非对齐 tail 仍使用不合法或低效路径：`unaligned_transfer_tail`。
+- 输出连续但被逐元素或小块写回：`fragmented_global_writeback`。
+- 多任务确实写入重叠地址并使用 Atomic：`atomic_write_contention`；地址互不重叠的多次 Atomic 不属于 contention。
 
-决策顺序是标签契约，不是建议顺序。例如 active cores 少于可用核且源码存在足量独立任务时，必须选 `parallel.core_underuse`，不能因某条 pipeline ratio 很高而跳过。实际成功但不符合当前首要标签的子版本，不得导出为该 policy 的正样本。
+## Buffer、流水与同步边界
 
-## 中粒度 Cause
+- 相同输入跨 tile 重复从 GM 搬入：`repeated_global_transfer`。
+- 中间结果写 GM 后又立即读回：`redundant_gm_roundtrip`。
+- 片上对象释放过早导致重新加载：`premature_buffer_eviction`。
+- 不同时活跃的 Buffer 同时占据 UB：`overextended_buffer_lifetime`。
+- UB 地址、stride 或 padding 与并发访问共同构成 bank/group 冲突，并有正式冲突指标佐证：`ub_bank_conflict`。
+- Queue/Buffer 生命周期可行但 CopyIn/Compute/CopyOut 没有稳态交错：`serial_pipeline_stages`。
+- 同步范围或频率超过真实依赖：`over_synchronization`。
+- 槽所有权和复用时点直接迫使阶段串行：`pipeline_slot_reuse_serialization`。
 
-| 父瓶颈 | cause_key（按优先级） |
-|---|---|
-| Fixed cost | `redundant_hot_path_overhead` |
-| Core underuse | `insufficient_parallelism` |
-| Load imbalance | `nonuniform_task_cost` → `uneven_task_distribution` |
-| MTE2 | `gm_bandwidth_saturation` → `inefficient_gm_transfer` → `low_l2_reuse` → `serial_copy_compute` |
-| MTE3 | `inefficient_writeback` |
-| Cube | `low_cube_onchip_reuse` |
-| Vector | `ub_bank_conflict` → `redundant_gm_roundtrip` → `excessive_cast_chain` → `high_latency_vector_reduction` |
-| FixPipe | `inefficient_fixpipe_writeback` |
-| Scalar | `inherent_serial_dependency` → `scalar_address_overhead` → `scalar_reduction` → `scalar_elementwise_compute` |
+## Scalar、Vector、Reduction 与 Cube 边界
 
-Cause 是可行动根因族。Block Dim、未展平轴、余数、第二执行波、具体 Scalar 循环和 DataCopy 形态写入 observation，不再拆成更多标签。指标 cause 必须满足真实条件；普通聚合数据不能证明 overlap，`serial_copy_compute` 需要 trace 或等价直接证据。
+- 循环内重复计算不变量：`recomputed_invariant_scalar_work`。
+- LocalTensor 逐 lane 执行可向量化计算：`scalar_local_lane_compute`。
+- 完整归约主体由 Scalar 循环完成：`scalar_reduction`。
+- Vector/局部归约已经存在，但 chunk 间按线性依赖链合并：`serial_chunk_reduction`。
+- 普通逐元素数学由 Scalar 主循环完成：`scalar_elementwise_compute`。
+- 标量或不变量反复 Duplicate 成完整 Tensor：`redundant_vector_materialization`。
+- work unit 合理但 repeat/mask 长期只覆盖少量合法 lane：`underutilized_vector_width`。
+- Vector 生产者与消费者之间反复落 UB：`vector_ub_bouncing`。
+- 连续 Cast 可在保持舍入语义下合并：`excessive_cast_chain`。
+- M/N/K tile 与容量、并行或尾块不匹配：`inefficient_cube_tiling`。
+- Cube 操作数本可驻留 L0/L1 却重复装载：`low_cube_onchip_reuse`。
+- FixPipe layout 与 Cube 输出或公开 ABI 不匹配：`mismatched_fixpipe_layout`。
+- FixPipe layout 正确但输出范围被碎片化提交：`fragmented_fixpipe_writeback`。
 
-`source.task_distribution` 可引用 `op_host/` 或 `op_kernel/`：它表示任务映射事实，不把同一 cause 按代码所在目录拆成两个 key。
+## 通用判断边界
+
+- `inefficient_work_unit_size` 必须给出当前 work unit、峰值 Buffer 容量关系、任务数和搬运粒度；不能仅因 tile 看起来大或小而输出。
+- `inactive_tiling_parameter` 必须沿 Host 写入到 Kernel 消费证明参数没有改变真实执行结构。
+- `overpartitioned_task_mapping` 必须证明过细 block/波次重复固定控制；任务数大于核数本身不是问题。
+- 双缓冲、增核、常驻、树形归约和布局调整只有在源码适用条件已成立时才产生对应 cause。
+- 每个 cause 只出现一次；同一 cause 的多个位置合并为一个 issue 的多条 evidence。
+- 同一源码机制的表现和后果写入 observation/reasoning，不重复生成多个 cause。
+
+## 排序
+
+1. 前置依赖：前项修改会改变后项 target、公式或成立条件。
+2. 影响一致性：正式 performance 与源码机制直接对应。
+3. 热路径乘数：按元素、tile、task 重复且覆盖更多数据者优先。
+4. 稳定并列：按源码出现顺序。
 
 ## 输出
 
 ```json
 {
-  "reasoning": ["证据：metric...；推断：bottleneck_key=...、cause_key=...。"],
-  "evidence": [
-    {"evidence_key": "...", "source": "performance... 或 op_kernel/...::符号", "observation": "..."}
-  ],
-  "bottleneck": {
-    "bottleneck_key": "parallel.load_imbalance",
-    "cause_key": "uneven_task_distribution"
-  }
+  "reasoning": ["Process 的 row 循环执行固定 blockLen 的规则跨步小搬运，因此确定为 fragmented_regular_strided_transfer。"],
+  "issues": [{
+    "evidence": [{
+      "evidence_key": "source.kernel.fragmented_regular_strided_transfer",
+      "source": "op_kernel/x.cpp::Process",
+      "observation": "row 循环每次搬运相同 blockLen，相邻地址具有固定 stride"
+    }],
+    "bottleneck": {
+      "bottleneck_key": "memory.transfer_inefficiency",
+      "cause_key": "fragmented_regular_strided_transfer"
+    }
+  }]
 }
 ```
-
-因果事实保存在 evidence/observation，推导保存在 reasoning；不重复保存 causal_explanation、evidence_keys 或 description。有效输入没有同时满足瓶颈条件和直接 cause 证据时输出 `bottleneck:null`。
-
-Source observation 不得包含 `performance.*`、ratio、cycle、百分比、Task Duration 或收益；这些事实必须作为独立 metric evidence。

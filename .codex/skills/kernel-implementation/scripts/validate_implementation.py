@@ -10,7 +10,9 @@ from pathlib import Path
 
 STRATEGY_SCRIPTS = Path(__file__).resolve().parents[2] / "kernel-strategy/scripts"
 sys.path.insert(0, str(STRATEGY_SCRIPTS))
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 from validate_strategy import validate as validate_strategy  # noqa: E402
+from validate_source_effect import validate as validate_source_effect  # noqa: E402
 
 
 def load(path: Path, label: str) -> dict:
@@ -61,20 +63,29 @@ def validate_attempts(attempts: object, expected: set[int], project: Path) -> No
         previous = validation
 
 
-def validate(bottleneck_path: Path, strategy_path: Path, implementation_path: Path, require_attempts: bool = False) -> None:
+def validate(
+    bottleneck_path: Path,
+    strategy_path: Path,
+    implementation_path: Path,
+    require_attempts: bool = False,
+    parent_path: Path | None = None,
+    project_path: Path | None = None,
+) -> None:
     validate_strategy(bottleneck_path, strategy_path)
-    primary = load(strategy_path, "策略").get("strategy")
+    primary = load(strategy_path, "策略").get("strategies")
     implementation = load(implementation_path, "实施记录")
-    if not isinstance(primary, dict) or not primary.get("actions"):
-        raise RuntimeError("策略缺少 actions")
-    fields = {"strategy_key", "reasoning", "actions", "modified_files"}
+    if not isinstance(primary, list) or not primary:
+        raise RuntimeError("策略缺少 strategies")
+    planned_actions = [action for strategy in primary for action in strategy.get("actions", [])]
+    fields = {"strategy_keys", "reasoning", "actions", "modified_files"}
     if set(implementation) not in (fields, fields | {"attempts"}):
         raise RuntimeError("implementation 字段不符合契约")
     if require_attempts and "attempts" not in implementation:
         raise RuntimeError("新实施记录必须包含 attempts")
-    if implementation.get("strategy_key") != primary["strategy_key"]:
-        raise RuntimeError("strategy_key 与策略不一致")
-    count = len(primary["actions"])
+    expected_keys = [strategy["strategy_key"] for strategy in primary]
+    if implementation.get("strategy_keys") != expected_keys:
+        raise RuntimeError("strategy_keys 与策略顺序不一致")
+    count = len(planned_actions)
     actions = implementation.get("actions")
     if not isinstance(actions, list) or len(actions) != count:
         raise RuntimeError("implementation 必须逐项覆盖 strategy actions")
@@ -88,20 +99,25 @@ def validate(bottleneck_path: Path, strategy_path: Path, implementation_path: Pa
     if indices != list(range(1, count + 1)):
         raise RuntimeError("action_index 必须从 1 连续覆盖全部 actions")
     reasoning = implementation.get("reasoning")
-    if not isinstance(reasoning, list) or not 2 <= len(reasoning) <= 8 or any(not isinstance(x, str) or "证据：" not in x or "推断：" not in x for x in reasoning):
-        raise RuntimeError("reasoning 不符合证据到推断格式")
-    text = "\n".join(reasoning)
-    if any(f"action_index={i}" not in text for i in indices):
-        raise RuntimeError("reasoning 必须引用每个 action_index")
+    if not isinstance(reasoning, list) or not reasoning or any(
+        not isinstance(x, str) or not x.strip() for x in reasoning
+    ):
+        raise RuntimeError("reasoning 必须是非空文本")
     files = implementation.get("modified_files")
-    project = strategy_path.resolve().parent.parent
+    # strategy.json is the immutable parent-version plan, while
+    # implementation.json and the modified sources live in the child version.
+    # Do not infer the child from strategy_path when an explicit project is
+    # available.  The fallback preserves the standalone legacy invocation.
+    project = (project_path or strategy_path.resolve().parent.parent).resolve()
     if not isinstance(files, list) or not files or any(not isinstance(p, str) or not p.startswith(("op_host/", "op_kernel/")) or not (project / p).is_file() for p in files):
         raise RuntimeError("modified_files 非法")
-    target_files = {item["target"].split("::", 1)[0] for item in primary["actions"]}
+    target_files = {item["target"].split("::", 1)[0] for item in planned_actions}
     if not target_files <= set(files):
         raise RuntimeError("modified_files 未覆盖全部 action target")
     if "attempts" in implementation:
         validate_attempts(implementation["attempts"], set(indices), project)
+    if parent_path is not None:
+        validate_source_effect(parent_path.resolve(), project.resolve())
 
 
 def main() -> None:
@@ -110,9 +126,18 @@ def main() -> None:
     parser.add_argument("--strategy", required=True, type=Path)
     parser.add_argument("--implementation", required=True, type=Path)
     parser.add_argument("--require-attempts", action="store_true")
+    parser.add_argument("--parent", type=Path, help="父版本目录；提供时强制执行源码效果复检")
+    parser.add_argument("--project-dir", type=Path, help="实施后的子版本目录")
     args = parser.parse_args()
     try:
-        validate(args.bottleneck, args.strategy, args.implementation, args.require_attempts)
+        validate(
+            args.bottleneck,
+            args.strategy,
+            args.implementation,
+            args.require_attempts,
+            args.parent,
+            args.project_dir,
+        )
     except RuntimeError as error:
         raise SystemExit(f"INVALID_IMPLEMENTATION: {error}") from error
     print(f"valid={args.implementation.resolve()}")

@@ -281,10 +281,15 @@ def prepare_custom(name: str, item: dict, project: Path, torch):
     values = {norm(key): value for key, value in zip(forward_names, inputs)}
     values.update({norm(key): value for key, value in model.named_parameters()})
     values.update({norm(key): value for key, value in model.named_buffers()})
+    aliases = {
+        "wdepthwise": "depthwiseweight",
+        "wpointwise": "pointwiseweight",
+    }
     unused = iter(inputs)
     custom_args = []
     for parameter in item["parameters"]:
         key = norm(parameter)
+        key = aliases.get(key, key)
         if key == "self" and inputs:
             custom_args.append(inputs[0])
         elif key in values:
