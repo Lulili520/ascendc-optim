@@ -14,10 +14,8 @@ from pathlib import Path
 from typing import Any
 
 
-INSTRUCTION = "根据正式性能、源码和固定 policy，输出唯一瓶颈、原因及可实施策略。"
-
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp"}
-VERSION_RE = re.compile(r"^(?P<operator>.+)_(?P<version>[01])$")
+VERSION_RE = re.compile(r"^(?P<operator>.+)_(?P<version>\d+)$")
 
 
 def repo_root() -> Path:
@@ -76,38 +74,37 @@ def compact_performance(report: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def training_policy_knowledge(knowledge: dict[str, Any]) -> dict[str, Any]:
-    """Project the validated canonical contract to the non-redundant training surface."""
-    root = repo_root()
-    bottleneck = load_module(
-        "kernel_bottleneck_training_contract",
-        root / ".codex/skills/kernel-bottleneck/scripts/validate_report.py",
-    )
-    strategy = load_module(
-        "kernel_strategy_training_contract",
-        root / ".codex/skills/kernel-strategy/scripts/derive_strategy.py",
-    )
-    slots = load_json(root / ".codex/skills/kernel-strategy/references/operation-slots.json")
-    metric_sources = {key: "|".join(sources) for key, sources in bottleneck.METRIC_SOURCES.items()}
-    cause_rules = {
-        cause: "|".join(filter(None, (
-            parent, evidence, strategy.RULES[cause], strategy.OPERATIONS.get(strategy.RULES[cause]),
-        )))
-        for cause, (parent, evidence) in bottleneck.CAUSES.items()
-    }
-    return {
-        "decision_order": knowledge["decision_order"],
-        "thresholds": {
-            "load_imbalance_percent_gt": 30,
-            "pipeline_ratio_gt": 0.8,
-            "mte2_cube_unique_max_gt": 0.7,
-            "pipeline_tie_margin_points": bottleneck.PIPELINE_TIE_MARGIN_PERCENTAGE_POINTS,
-        },
-        "metric_evidence_sources": metric_sources,
-        "cause_rule_fields": "bottleneck|cause_evidence|strategy|operation",
-        "cause_rules": cause_rules,
-        "operation_slots": {key: ">".join(value) for key, value in slots.items()},
-    }
+def compact_evidence(items: list[dict[str, Any]]) -> list[str]:
+    return [f'{item["source"]}|{item["observation"]}' for item in items]
+
+
+def project_policy(bottleneck: dict[str, Any], strategy: dict[str, Any]) -> dict[str, Any]:
+    """Merge workspace reports into one compact causal training answer."""
+    issues = bottleneck.get("issues")
+    strategies = strategy.get("strategies")
+    b_reasoning = bottleneck.get("reasoning")
+    s_reasoning = strategy.get("reasoning")
+    if not all(isinstance(value, list) for value in (issues, strategies, b_reasoning, s_reasoning)):
+        raise ValueError("bottleneck/strategy 缺少有序列表")
+    if not issues or len(b_reasoning) != len(issues) or len(strategies) != len(issues) or len(s_reasoning) != len(strategies):
+        raise ValueError("必须按顺序完整导出全部 issues 及其 strategies")
+    policies = []
+    for issue, item, b_reason, s_reason in zip(issues, strategies, b_reasoning, s_reasoning):
+        bottleneck_item = issue["bottleneck"]
+        changes = [{
+            "target": action["target"],
+            "edits": action["edits"],
+            "constraints": action["constraints"],
+        } for action in item["actions"]]
+        policies.append({
+            "bottleneck": bottleneck_item["bottleneck_key"],
+            "cause": bottleneck_item["cause_key"],
+            "evidence": compact_evidence(issue["evidence"]),
+            "strategy": item["strategy_key"],
+            "reasoning": f"{b_reason}；{s_reason}",
+            "changes": changes,
+        })
+    return {"policy": policies}
 
 
 def load_module(name: str, path: Path) -> Any:
@@ -121,52 +118,36 @@ def load_module(name: str, path: Path) -> Any:
 
 def validate_policy_knowledge(knowledge: dict[str, Any]) -> None:
     root = repo_root()
-    bottleneck = load_module(
-        "kernel_bottleneck_contract",
-        root / ".codex/skills/kernel-bottleneck/scripts/validate_report.py",
-    )
     strategy = load_module(
         "kernel_strategy_contract",
         root / ".codex/skills/kernel-strategy/scripts/derive_strategy.py",
     )
-    got_bottlenecks = knowledge.get("bottleneck_keys", {})
-    if set(got_bottlenecks) != set(bottleneck.BOTTLENECK_EVIDENCE):
-        raise ValueError("policy knowledge 的 bottleneck_keys 与官方 validator 不一致")
+    if knowledge.get("decision_order") != [
+        "read_complete_source", "identify_concrete_causes",
+        "deduplicate_and_rank", "derive_deterministic_strategies",
+    ]:
+        raise ValueError("policy knowledge 的全问题决策顺序不一致")
     if knowledge.get("cause_strategies") != strategy.RULES:
         raise ValueError("policy knowledge 的 cause→strategy 映射与官方推导器不一致")
     if knowledge.get("strategy_operations") != strategy.OPERATIONS:
         raise ValueError("policy knowledge 的 strategy→operation 映射与官方推导器不一致")
-    if knowledge.get("strategy_key_meanings") != strategy.STRATEGY_DESCRIPTIONS:
-        raise ValueError("policy knowledge 的 strategy key 定义与官方推导器不一致")
-    if knowledge.get("operation_meanings") != strategy.OPERATION_DESCRIPTIONS:
-        raise ValueError("policy knowledge 的 operation 定义与官方推导器不一致")
-    if knowledge.get("pipeline_tie_order") != list(bottleneck.PIPELINE_TIE_ORDER):
-        raise ValueError("policy knowledge 的流水线平局顺序与官方 validator 不一致")
-    if knowledge.get("pipeline_tie_margin_percentage_points") != bottleneck.PIPELINE_TIE_MARGIN_PERCENTAGE_POINTS:
-        raise ValueError("policy knowledge 的流水线平局 margin 与官方 validator 不一致")
-    expected_cause_priority = {key: list(value) for key, value in bottleneck.CAUSE_PRIORITY.items()}
-    if knowledge.get("cause_priority") != expected_cause_priority:
-        raise ValueError("policy knowledge 的 cause 优先级与官方 validator 不一致")
-    meanings = knowledge.get("evidence_key_meanings", {})
-    if set(meanings) != bottleneck.EVIDENCE_KEYS or any(
-        not isinstance(value, str) or not value.strip() for value in meanings.values()
-    ):
-        raise ValueError("policy knowledge 的 evidence key 定义不完整")
-    cause_meanings = knowledge.get("cause_key_meanings", {})
-    if set(cause_meanings) != set(bottleneck.CAUSE_DESCRIPTIONS) or any(
-        not isinstance(value, str) or not value.strip() for value in cause_meanings.values()
-    ):
-        raise ValueError("policy knowledge 的 cause key 定义不完整")
-    selection = knowledge.get("selection_rules", {})
-    if set(selection) != {"fixed_cost_bound", "core_underuse", "load_imbalance", "pipeline_candidate", "priority"}:
-        raise ValueError("policy knowledge 缺少完整瓶颈选择规则")
+    if knowledge.get("selection_rules") != {
+        "source_first": "直接读取当前 shape 的完整 Host/Kernel 执行路径并输出确定问题",
+        "concrete_cause": "cause 必须具体、排他、有直接源码证据并唯一决定 strategy",
+        "performance_role": "性能原值只补充影响、排序和因果一致性，不以固定阈值产生 cause",
+        "deterministic_strategy": "strategy 不重新诊断或选择候选方向",
+    }:
+        raise ValueError("policy knowledge 的确定 cause/strategy 规则不一致")
     action_fields = knowledge.get("action_field_meanings", {})
     if set(action_fields) != {"target", "operation", "edits", "constraints"}:
         raise ValueError("policy knowledge 缺少 action 字段语义")
     slots = load_json(root / ".codex/skills/kernel-strategy/references/operation-slots.json")
     if set(slots) != set(strategy.OPERATIONS.values()) or any(
-        not isinstance(value, list) or not 2 <= len(value) <= 4
-        or any(not isinstance(item, str) or not item for item in value)
+        not isinstance(value, dict) or set(value) != {"required", "optional"}
+        or not isinstance(value["required"], list) or not 1 <= len(value["required"]) <= 4
+        or not isinstance(value["optional"], list)
+        or len(value["required"]) + len(value["optional"]) > 4
+        or any(not isinstance(item, str) or not item for item in value["required"] + value["optional"])
         for value in slots.values()
     ):
         raise ValueError("operation slots 未完整覆盖固定 operation")
@@ -218,15 +199,16 @@ def source_file_bytes(project: Path) -> dict[str, bytes]:
 
 def validate_implementation_link(parent: Path, parent_strategy: dict[str, Any], child: Path) -> None:
     implementation = load_json(child / "strategy/implementation.json")
-    strategy = parent_strategy.get("strategy")
-    if not isinstance(strategy, dict):
-        raise ValueError("父版本 strategy 为空")
-    if implementation.get("strategy_key") != strategy.get("strategy_key"):
-        raise ValueError("子版本 implementation.strategy_key 与父版本策略不一致")
+    strategies = parent_strategy.get("strategies")
+    if not isinstance(strategies, list) or not strategies:
+        raise ValueError("父版本 strategies 为空")
+    if implementation.get("strategy_keys") != [item.get("strategy_key") for item in strategies]:
+        raise ValueError("子版本 implementation.strategy_keys 与父版本策略不一致")
     modified = implementation.get("modified_files")
     if not isinstance(modified, list) or not modified:
         raise ValueError("子版本 implementation 缺少 modified_files")
-    target_files = {action["target"].split("::", 1)[0] for action in strategy.get("actions", [])}
+    planned_actions = [action for strategy in strategies for action in strategy.get("actions", [])]
+    target_files = {action["target"].split("::", 1)[0] for action in planned_actions}
     parent_files = source_file_bytes(parent)
     child_files = source_file_bytes(child)
     actual_modified = {
@@ -235,12 +217,17 @@ def validate_implementation_link(parent: Path, parent_strategy: dict[str, Any], 
     }
     if set(modified) != actual_modified:
         raise ValueError("implementation.modified_files 与父子源码真实 diff 不一致")
-    if target_files != actual_modified:
-        raise ValueError("真实源码 diff 必须恰好覆盖全部 action target，且不得混入未声明文件")
+    if not target_files <= actual_modified:
+        raise ValueError("真实源码 diff 未覆盖全部 action target")
     actions = implementation.get("actions")
-    expected_indices = list(range(1, len(strategy.get("actions", [])) + 1))
+    expected_indices = list(range(1, len(planned_actions) + 1))
     if not isinstance(actions, list) or [item.get("action_index") for item in actions if isinstance(item, dict)] != expected_indices:
         raise ValueError("implementation.actions 未按 action_index 完整关联父策略")
+    effect = load_module(
+        "kernel_policy_source_effect",
+        repo_root() / ".codex/skills/kernel-implementation/scripts/validate_source_effect.py",
+    )
+    effect.validate(parent, child)
 
 
 def source_fingerprint(project: Path) -> str:
@@ -275,65 +262,6 @@ def render_sources(project: Path, folder: str) -> str:
     return "\n\n".join(chunks)
 
 
-def matching_brace(text: str, opening: int) -> int:
-    depth = 0
-    for position in range(opening, len(text)):
-        if text[position] == "{":
-            depth += 1
-        elif text[position] == "}":
-            depth -= 1
-            if depth == 0:
-                return position
-    return len(text)
-
-
-def mask_comments_and_strings(text: str) -> str:
-    pattern = re.compile(r'//[^\n]*|/\*.*?\*/|"(?:\\.|[^"\\])*"|\'(?:\\.|[^\'\\])*\'', re.S)
-    return pattern.sub(lambda match: "".join("\n" if char == "\n" else " " for char in match.group()), text)
-
-
-def file_symbols(text: str) -> list[str]:
-    masked = mask_comments_and_strings(text)
-    scopes = []
-    for match in re.finditer(r"\b(namespace|class|struct)\s+([A-Za-z_]\w*)[^;{]*\{", masked):
-        opening = masked.find("{", match.start())
-        scopes.append((opening, matching_brace(masked, opening), match.group(2), match.group(1)))
-    symbols = []
-    function_pattern = re.compile(
-        r"(?:^|\n)\s*(?:template\s*<[^;{}]+>\s*)?"
-        r"(?:[A-Za-z_]\w*(?:::[A-Za-z_]\w*)*[\s*&<>:,]+)+"
-        r"((?:[A-Za-z_]\w*::)*[A-Za-z_]\w*)\s*\([^;{}]*\)\s*(?:const\s*)?\{",
-        re.S,
-    )
-    for match in function_pattern.finditer(masked):
-        name = match.group(1)
-        if name in {"if", "for", "while", "switch", "catch"}:
-            continue
-        parents = [scope for scope in scopes if scope[0] < match.start(1) < scope[1]]
-        prefix = "::".join(scope[2] for scope in sorted(parents, key=lambda item: item[0]))
-        if "::" not in name and prefix:
-            name = f"{prefix}::{name}"
-        symbols.append(name)
-    return list(dict.fromkeys(symbols))
-
-
-def source_symbols(project: Path) -> str:
-    """List every visible source symbol without selecting or ranking an answer target."""
-    rows = []
-    for folder in ("op_host", "op_kernel"):
-        for path in sorted(
-            item for item in (project / folder).rglob("*")
-            if item.is_file() and item.suffix.lower() in SOURCE_SUFFIXES
-        ):
-            relative = path.relative_to(project).as_posix()
-            text = path.read_text(encoding="utf-8", errors="replace")
-            for name in file_symbols(text):
-                rows.append(f"{relative}::{name}")
-    if not rows:
-        raise ValueError("op_host/op_kernel 中未提取到源码 symbol")
-    return "\n".join(rows)
-
-
 def latency(performance: dict[str, Any]) -> float:
     report_value = performance.get("kernel_latency_us")
     if not isinstance(report_value, (int, float)) or not math.isfinite(report_value) or report_value <= 0:
@@ -341,25 +269,15 @@ def latency(performance: dict[str, Any]) -> float:
     return float(report_value)
 
 
-def operator_json(operator: str, entry: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "operator": operator,
-        "level": entry.get("level"),
-        "function": entry.get("function"),
-        "parameters": entry.get("parameters"),
-    }
-
-
 def evaluate_candidate(
     parent: Path,
     manifest: dict[str, Any],
     knowledge: dict[str, Any],
-    output_format: str,
     min_reduction: float,
 ) -> tuple[dict[str, str] | None, dict[str, Any]]:
     match = VERSION_RE.fullmatch(parent.name)
     if match is None:
-        raise ValueError("目录名不是 <OperatorName>_[01]")
+        raise ValueError("目录名不是 <OperatorName>_<version>")
     operator = match.group("operator")
     version = int(match.group("version"))
     child = parent.with_name(f"{operator}_{version + 1}")
@@ -382,12 +300,13 @@ def evaluate_candidate(
         "child_latency_us": child_latency,
         "reduction_percent": reduction,
         "threshold_percent": min_reduction,
+        "result_kind": "verified_policy" if reduction > min_reduction else "verified_execution_not_training",
     })
 
     bottleneck = load_json(parent / "bottleneck/bottleneck.json")
     strategy = load_json(parent / "strategy/strategy.json")
-    if bottleneck.get("bottleneck") is None or strategy.get("strategy") is None:
-        raise ValueError("父版本 bottleneck 或 strategy 为空")
+    if not bottleneck.get("issues") or not strategy.get("strategies"):
+        raise ValueError("父版本 issues 或 strategies 为空")
     validate_parent_reports(parent)
     validate_implementation_link(parent, strategy, child)
     if not reduction > min_reduction:
@@ -395,19 +314,11 @@ def evaluate_candidate(
         return None, audit
 
     input_text = "\n\n".join([
-        "[TASK_INSTRUCT]\n" + INSTRUCTION,
-        "[POLICY_KNOWLEDGE_JSON]\n" + compact_json(training_policy_knowledge(knowledge)),
-        "[OPERATOR_JSON]\n" + compact_json(operator_json(operator, manifest[operator])),
-        "[PERFORMANCE_JSON]\n" + compact_json(compact_performance(parent_perf)),
-        "[SOURCE_SYMBOLS]\n" + source_symbols(parent),
-        "[OP_HOST_SOURCE]\n" + render_sources(parent, "op_host"),
-        "[OP_KERNEL_SOURCE]\n" + render_sources(parent, "op_kernel"),
-        "[OUTPUT_FORMAT]\n" + output_format.strip(),
+        "[PERF]\n" + compact_json(compact_performance(parent_perf)),
+        "[HOST]\n" + render_sources(parent, "op_host"),
+        "[KERNEL]\n" + render_sources(parent, "op_kernel"),
     ])
-    output_text = "\n\n".join([
-        "[BOTTLENECK_JSON]\n" + compact_json(bottleneck),
-        "[STRATEGY_JSON]\n" + compact_json(strategy),
-    ])
+    output_text = compact_json(project_policy(bottleneck, strategy))
     sample = {"ops": parent.name, "input": input_text, "output": output_text}
     audit.update({
         "eligible": True,
@@ -455,7 +366,6 @@ def main() -> int:
     manifest = load_json(args.manifest.resolve())
     knowledge = load_json(skill_root() / "references/policy-knowledge.json")
     validate_policy_knowledge(knowledge)
-    output_format = (skill_root() / "references/output-format.txt").read_text(encoding="utf-8")
     projects = discover(workspace_root, set(args.ops), set(args.level))
     samples: list[dict[str, str]] = []
     audit_items: list[dict[str, Any]] = []
@@ -463,7 +373,7 @@ def main() -> int:
     for project in projects:
         try:
             sample, audit = evaluate_candidate(
-                project, manifest, knowledge, output_format,
+                project, manifest, knowledge,
                 min_reduction=args.min_reduction_percent,
             )
             audit_items.append(audit)
