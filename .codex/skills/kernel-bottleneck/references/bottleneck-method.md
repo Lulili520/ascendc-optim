@@ -14,32 +14,33 @@ shape/dtype/数学语义
 
 `bottleneck_key` 是问题域，`cause_key` 是已经足以唯一决定修改方向的具体源码机制。若同一 cause 还需要在多个 strategy 中选择，必须在本阶段继续拆分 cause。
 
-## 分析顺序
+## 强制完整分析顺序
 
 1. 从 shape、axis、dtype 和数学语义理解当前执行分支；Reduction 区分 AR/ARA、多轴、FullLoad/Chunked 和 With-Index。
-2. 跟踪 Host tiling、blockDim、参数传递与 Kernel 消费。
-3. 跟踪 task 到输出区间的映射、余数、波次和单任务代价。
-4. 跟踪 CopyIn/CopyOut 的连续性、跨步关系、粒度、对齐与 tail。
-5. 跟踪 Scalar、Vector、Reduction、Cube 和 FixPipe 主路径。
+2. 展开数学热路径的循环乘数，先计算每个输出的归约深度、标量运算和访存次数。
+3. 跟踪 CopyIn/CopyOut 或裸 GM 访问的连续性、跨步关系、粒度、对齐与 tail。
+4. 跟踪 Scalar、Vector、Reduction、Cube 和 FixPipe 主路径。
+5. 跟踪写回的连续性、粒度、dtype 转换与公开 ABI。
 6. 跟踪 Queue/TBuf 生命周期、片上布局、同步和流水 prologue/steady/epilogue。
-7. 合并同一源码机制，只保留能够唯一决定 strategy 的根因。
+7. 最后跟踪 Host tiling、blockDim、参数消费、task 到输出区间的映射、波次和单任务代价；不得用调度问题遮蔽更高乘数的计算或搬运问题。
+8. 对每个阶段明确记录“确定问题”或“源码已是合理结构”的内部结论；不得因先发现一个主问题而停止后续阶段。
+9. 合并同一源码机制，按“前置依赖、可消除热路径总成本、影响一致性、源码顺序”排序，只输出前 3 个能唯一决定 strategy 的根因。该上限只控制单轮实施面，不限制主体变化数量。
+
+上述结论只存在于本次推理中，不写 `coverage.json`、`source_model.json` 或新的报告字段。
+
+## 静态成本与完整性
+
+- 搬运按 `有效字节 + 重复字节 + 搬运调用次数 × 启动开销` 比较；规则跨步循环必须判断能否由一次二维搬运表达，滑窗必须计算相邻窗口的重叠读取。
+- Vector 按有效 lane、repeat/mask、指令链和 Cast/Select/Duplicate 中间量检查；Scalar 按元素、lane、tile 或 task 的实际重复次数检查。C++ 循环中的 LocalTensor `Compare/Select/Reduce` 仍是 Vector 指令，不是逐元素 Scalar 计算。
+- Reduction 同时检查 chunk 内归约、chunk 间合并深度、索引伴随状态和同步次数。
+- 任务映射计算 `waves=ceil(total_tasks/active_cores)`，并比较最大单核工作量、尾核、每 task 初始化和持久 task 循环。
+- 流水只有同时存在可证明的 prologue、steady、epilogue 和正确槽所有权时，才按 `max(MTE2, compute, MTE3)` 理解；否则按未隐藏阶段成本处理。
+- performance 只验证源码机制的影响方向。低 ratio 不能否定按高乘数执行的确定源码问题，高 ratio 也不能单独产生 cause。
+- work unit、搬运布局、计算路径和向量宽度描述不同成本来源，可以在同一 symbol 上同时成立；只有修改方向与源码机制完全相同才允许去重。
 
 ## Cause 体系
 
-| bottleneck_key | cause_key |
-|---|---|
-| `overhead.hot_path_inefficiency` | `repeated_hot_path_overhead`、`overpartitioned_task_mapping` |
-| `tiling.execution_inefficiency` | `inactive_tiling_parameter`、`inefficient_work_unit_size` |
-| `parallel.core_underuse` | `insufficient_parallelism` |
-| `parallel.load_imbalance` | `uneven_task_distribution`、`nonuniform_task_cost` |
-| `memory.transfer_inefficiency` | `scalar_global_contiguous_access`、`fragmented_contiguous_transfer`、`fragmented_regular_strided_transfer`、`scalar_irregular_gather_access`、`scalar_irregular_scatter_access`、`unaligned_transfer_tail`、`fragmented_global_writeback`、`atomic_write_contention` |
-| `memory.reuse_inefficiency` | `repeated_global_transfer`、`redundant_gm_roundtrip`、`premature_buffer_eviction`、`overextended_buffer_lifetime` |
-| `memory.onchip_conflict` | `ub_bank_conflict` |
-| `pipeline.overlap_loss` | `serial_pipeline_stages`、`over_synchronization`、`pipeline_slot_reuse_serialization` |
-| `compute.scalar_inefficiency` | `recomputed_invariant_scalar_work`、`scalar_local_lane_compute`、`scalar_reduction`、`scalar_elementwise_compute` |
-| `compute.reduction_inefficiency` | `serial_chunk_reduction` |
-| `compute.vector_dataflow_inefficiency` | `redundant_vector_materialization`、`underutilized_vector_width`、`vector_ub_bouncing`、`excessive_cast_chain` |
-| `compute.cube_dataflow_inefficiency` | `inefficient_cube_tiling`、`low_cube_onchip_reuse`、`mismatched_fixpipe_layout`、`fragmented_fixpipe_writeback` |
+生成报告前读取 [cause-taxonomy.json](cause-taxonomy.json)。它是 `cause_key → bottleneck_key + 必需源码 evidence_key` 的唯一事实源；不得自创 key。下面只保留各 cause 的排他判断边界。
 
 ## 搬运 Cause 排他边界
 
@@ -61,13 +62,13 @@ shape/dtype/数学语义
 - UB 地址、stride 或 padding 与并发访问共同构成 bank/group 冲突，并有正式冲突指标佐证：`ub_bank_conflict`。
 - Queue/Buffer 生命周期可行但 CopyIn/Compute/CopyOut 没有稳态交错：`serial_pipeline_stages`。
 - 同步范围或频率超过真实依赖：`over_synchronization`。
-- 槽所有权和复用时点直接迫使阶段串行：`pipeline_slot_reuse_serialization`。
+- 槽所有权和复用时点直接迫使阶段串行，且存在至少两个可交错 chunk、独立搬运/计算和足够 UB：`pipeline_slot_reuse_serialization`。单槽本身不是充分证据。
 
 ## Scalar、Vector、Reduction 与 Cube 边界
 
 - 循环内重复计算不变量：`recomputed_invariant_scalar_work`。
 - LocalTensor 逐 lane 执行可向量化计算：`scalar_local_lane_compute`。
-- 完整归约主体由 Scalar 循环完成：`scalar_reduction`。
+- 完整归约主体由标量 load、标量算术/比较和标量状态完成：`scalar_reduction`。循环体已用 LocalTensor `Compare/Select/Reduce` 更新多 lane 状态时排除此 cause。
 - Vector/局部归约已经存在，但 chunk 间按线性依赖链合并：`serial_chunk_reduction`。
 - 普通逐元素数学由 Scalar 主循环完成：`scalar_elementwise_compute`。
 - 标量或不变量反复 Duplicate 成完整 Tensor：`redundant_vector_materialization`。
@@ -81,9 +82,9 @@ shape/dtype/数学语义
 
 ## 通用判断边界
 
-- `inefficient_work_unit_size` 必须给出当前 work unit、峰值 Buffer 容量关系、任务数和搬运粒度；不能仅因 tile 看起来大或小而输出。
+- `inefficient_work_unit_size` 必须给出当前 work unit、容量允许的更大合法 work unit、任务数、Vector 覆盖和搬运粒度；不能仅因 tile 看起来小而输出。
 - `inactive_tiling_parameter` 必须沿 Host 写入到 Kernel 消费证明参数没有改变真实执行结构。
-- `overpartitioned_task_mapping` 必须证明过细 block/波次重复固定控制；任务数大于核数本身不是问题。
+- `overpartitioned_task_mapping` 必须证明 work unit 已合理后仍有过细 block/波次；若小 tile 直接造成 block 过多，只输出 `inefficient_work_unit_size`。
 - 双缓冲、增核、常驻、树形归约和布局调整只有在源码适用条件已成立时才产生对应 cause。
 - 每个 cause 只出现一次；同一 cause 的多个位置合并为一个 issue 的多条 evidence。
 - 同一源码机制的表现和后果写入 observation/reasoning，不重复生成多个 cause。
@@ -92,7 +93,7 @@ shape/dtype/数学语义
 
 1. 前置依赖：前项修改会改变后项 target、公式或成立条件。
 2. 影响一致性：正式 performance 与源码机制直接对应。
-3. 热路径乘数：按元素、tile、task 重复且覆盖更多数据者优先。
+3. 总成本：热路径执行次数乘单次搬运、计算、同步或调度成本；不能只按 issue 类型或单次操作大小排序。
 4. 稳定并列：按源码出现顺序。
 
 ## 输出

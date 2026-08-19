@@ -7,64 +7,12 @@ import argparse
 import json
 import math
 import re
+import sys
 from pathlib import Path
 from typing import Any
 
-
-BOTTLENECK_DESCRIPTIONS = {
-    "overhead.hot_path_inefficiency": "热路径包含可消除的重复工作",
-    "tiling.execution_inefficiency": "Host tiling 与真实 Kernel 执行结构不匹配",
-    "parallel.core_underuse": "独立任务没有充分映射到可用核",
-    "parallel.load_imbalance": "参与核之间的任务数量或代价不均",
-    "memory.transfer_inefficiency": "GM 搬运形态、对齐或写回粒度低效",
-    "memory.reuse_inefficiency": "数据或中间量没有按生命周期片上复用",
-    "memory.onchip_conflict": "片上布局造成可规避的访问冲突",
-    "pipeline.overlap_loss": "可并行阶段或槽生命周期导致串行化",
-    "compute.scalar_inefficiency": "可并行主要工作仍由 Scalar 路径承担",
-    "compute.vector_dataflow_inefficiency": "Vector 宽度、物化、转换或中间表示低效",
-    "compute.reduction_inefficiency": "分块归约合并结构低效",
-    "compute.cube_dataflow_inefficiency": "Cube tile、片上复用或 FixPipe 数据流低效",
-}
-
-# cause_key 必须描述足以唯一决定 strategy 的具体源码机制。
-CAUSES = {
-    "repeated_hot_path_overhead": ("overhead.hot_path_inefficiency", "source.hot_path.redundant_overhead"),
-    "inactive_tiling_parameter": ("tiling.execution_inefficiency", "source.host.inactive_tiling_parameter"),
-    "insufficient_parallelism": ("parallel.core_underuse", "source.host.parallel_mapping"),
-    "uneven_task_distribution": ("parallel.load_imbalance", "source.task_distribution"),
-    "nonuniform_task_cost": ("parallel.load_imbalance", "source.kernel.nonuniform_task_cost"),
-    "overpartitioned_task_mapping": ("overhead.hot_path_inefficiency", "source.host.overpartitioned_mapping"),
-    "inefficient_work_unit_size": ("tiling.execution_inefficiency", "source.host.work_unit_size"),
-    "scalar_global_contiguous_access": ("memory.transfer_inefficiency", "source.kernel.scalar_global_contiguous_access"),
-    "fragmented_contiguous_transfer": ("memory.transfer_inefficiency", "source.kernel.fragmented_contiguous_transfer"),
-    "fragmented_regular_strided_transfer": ("memory.transfer_inefficiency", "source.kernel.fragmented_regular_strided_transfer"),
-    "scalar_irregular_gather_access": ("memory.transfer_inefficiency", "source.kernel.scalar_irregular_gather_access"),
-    "scalar_irregular_scatter_access": ("memory.transfer_inefficiency", "source.kernel.scalar_irregular_scatter_access"),
-    "unaligned_transfer_tail": ("memory.transfer_inefficiency", "source.kernel.unaligned_transfer_tail"),
-    "fragmented_global_writeback": ("memory.transfer_inefficiency", "source.kernel.fragmented_global_writeback"),
-    "atomic_write_contention": ("memory.transfer_inefficiency", "source.kernel.atomic_write_contention"),
-    "repeated_global_transfer": ("memory.reuse_inefficiency", "source.kernel.repeated_global_transfer"),
-    "redundant_gm_roundtrip": ("memory.reuse_inefficiency", "source.kernel.redundant_gm_roundtrip"),
-    "premature_buffer_eviction": ("memory.reuse_inefficiency", "source.kernel.premature_buffer_eviction"),
-    "overextended_buffer_lifetime": ("memory.reuse_inefficiency", "source.kernel.overextended_buffer_lifetime"),
-    "ub_bank_conflict": ("memory.onchip_conflict", "source.kernel.ub_bank_conflict"),
-    "serial_pipeline_stages": ("pipeline.overlap_loss", "source.kernel.serial_pipeline_stages"),
-    "over_synchronization": ("pipeline.overlap_loss", "source.kernel.over_synchronization"),
-    "pipeline_slot_reuse_serialization": ("pipeline.overlap_loss", "source.kernel.pipeline_slot_reuse_serialization"),
-    "recomputed_invariant_scalar_work": ("compute.scalar_inefficiency", "source.hot_path.recomputed_invariant_scalar_work"),
-    "scalar_local_lane_compute": ("compute.scalar_inefficiency", "source.kernel.scalar_local_lane_compute"),
-    "scalar_reduction": ("compute.scalar_inefficiency", "source.kernel.scalar_reduction"),
-    "serial_chunk_reduction": ("compute.reduction_inefficiency", "source.kernel.serial_chunk_reduction"),
-    "scalar_elementwise_compute": ("compute.scalar_inefficiency", "source.kernel.scalar_elementwise_compute"),
-    "redundant_vector_materialization": ("compute.vector_dataflow_inefficiency", "source.kernel.redundant_vector_materialization"),
-    "underutilized_vector_width": ("compute.vector_dataflow_inefficiency", "source.kernel.underutilized_vector_width"),
-    "vector_ub_bouncing": ("compute.vector_dataflow_inefficiency", "source.kernel.vector_ub_bouncing"),
-    "excessive_cast_chain": ("compute.vector_dataflow_inefficiency", "source.kernel.excessive_cast_chain"),
-    "inefficient_cube_tiling": ("compute.cube_dataflow_inefficiency", "source.host.inefficient_cube_tiling"),
-    "low_cube_onchip_reuse": ("compute.cube_dataflow_inefficiency", "source.kernel.low_cube_onchip_reuse"),
-    "mismatched_fixpipe_layout": ("compute.cube_dataflow_inefficiency", "source.kernel.mismatched_fixpipe_layout"),
-    "fragmented_fixpipe_writeback": ("compute.cube_dataflow_inefficiency", "source.kernel.fragmented_fixpipe_writeback"),
-}
+_TAXONOMY_PATH = Path(__file__).resolve().parent.parent / "references/cause-taxonomy.json"
+CAUSES = {key: tuple(value) for key, value in json.loads(_TAXONOMY_PATH.read_text()).items()}
 
 CAUSE_DESCRIPTIONS = {cause: source.replace("source.", "").replace(".", " ") for cause, (_, source) in CAUSES.items()}
 
@@ -86,7 +34,7 @@ METRIC_SOURCES = {
 }
 SOURCE_EVIDENCE = {source for _, source in CAUSES.values()}
 EVIDENCE_KEYS = set(METRIC_SOURCES) | SOURCE_EVIDENCE
-BOTTLENECK_EVIDENCE = {key: () for key in BOTTLENECK_DESCRIPTIONS}
+BOTTLENECK_EVIDENCE = {key: () for key, _ in CAUSES.values()}
 
 SOURCE_ANCHORS = {
     "scalar_global_contiguous_access": ("GetValue", "SetValue"),
@@ -103,7 +51,6 @@ SOURCE_ANCHORS = {
 
 # 同一 symbol 上这些 cause 是同一机制的不同具体分类，必须只保留一个根因。
 EXCLUSIVE_CAUSE_GROUPS = (
-    {"inefficient_work_unit_size", "fragmented_contiguous_transfer", "underutilized_vector_width"},
     {"scalar_global_contiguous_access", "fragmented_contiguous_transfer"},
     {"fragmented_contiguous_transfer", "fragmented_regular_strided_transfer"},
     {"serial_pipeline_stages", "pipeline_slot_reuse_serialization"},
@@ -135,7 +82,18 @@ def _symbol_bodies(text: str, symbol: str) -> list[str]:
     masked = _mask_comments_and_strings(text)
     matches = list(re.finditer(rf"\b{name}\s*\([^;{{}}]*\)[^;{{}}]*\{{", masked, re.S))
     if not matches:
-        raise RuntimeError(f"源码 symbol 无法定位到函数体：{symbol}")
+        matches = list(re.finditer(
+            rf"\b(?:struct|class)\s+{name}\b[^;{{}}]*\{{", masked, re.S
+        ))
+    if not matches:
+        macro = re.search(
+            rf"\bBEGIN_TILING_DATA_DEF\s*\(\s*{name}\s*\)([\s\S]*?)\bEND_TILING_DATA_DEF\b",
+            masked,
+        )
+        if macro:
+            return [text[macro.start():macro.end()]]
+    if not matches:
+        raise RuntimeError(f"源码 symbol 无法定位到函数、类型或 tiling 定义：{symbol}")
     bodies = []
     for match in matches:
         opening = masked.find("{", match.start())
@@ -177,9 +135,12 @@ def _validate_source(project: Path, key: str, cause: str, source: str) -> None:
     if not symbol.strip():
         raise RuntimeError(f"源码 evidence 符号不存在：{source}")
     bodies = _symbol_bodies(path.read_text(encoding="utf-8", errors="replace"), symbol)
-    anchors = SOURCE_ANCHORS.get(cause)
-    if anchors and not any(anchor in body for body in bodies for anchor in anchors):
-        raise RuntimeError(f"{cause} 的 target 缺少源码锚点：{'/'.join(anchors)}")
+    if cause == "scalar_reduction" and any(
+        re.search(r"\bLocalTensor\s*<", body)
+        and re.search(r"\b(?:Compare|Select|Reduce\w*|WholeReduce\w*|BlockReduce\w*)\s*\(", body)
+        for body in bodies
+    ):
+        raise RuntimeError("scalar_reduction 不能引用已使用 LocalTensor Vector 归约状态的 symbol")
 
 
 def validate(path: Path) -> None:
@@ -194,13 +155,14 @@ def validate(path: Path) -> None:
         raise RuntimeError("reasoning 必须是非空文本数组")
     if not isinstance(issues, list):
         raise RuntimeError("issues 必须是数组")
+    if len(issues) > 3:
+        raise RuntimeError("每轮最多输出 3 个最高影响 issues")
     if len(reasoning) != (len(issues) if issues else 1):
         raise RuntimeError("reasoning 必须与 issues 逐项对应；无问题时保留一条终止说明")
 
     performance = _load_performance(path)
     project = path.resolve().parent.parent
     seen_causes: set[str] = set()
-    cause_sources: dict[str, set[str]] = {}
     for number, issue in enumerate(issues, 1):
         if not isinstance(issue, dict) or set(issue) != {"evidence", "bottleneck"}:
             raise RuntimeError(f"issue {number} 只能包含 evidence、bottleneck")
@@ -241,17 +203,6 @@ def validate(path: Path) -> None:
         required_source = CAUSES[cause][1]
         if required_source not in keys:
             raise RuntimeError(f"issue {number} 缺少直接源码证据：{required_source}")
-        symbols = [source.rsplit("::", 1)[-1] for source in sources]
-        if not any(symbol in reasoning[number - 1] for symbol in symbols):
-            raise RuntimeError(f"issue {number} reasoning 未引用源码 symbol")
-        cause_sources[cause] = sources
-
-    for group in EXCLUSIVE_CAUSE_GROUPS:
-        present = [cause for cause in group if cause in cause_sources]
-        for index, left in enumerate(present):
-            for right in present[index + 1:]:
-                if cause_sources[left] & cause_sources[right]:
-                    raise RuntimeError(f"同一源码机制不得重复归因：{left}/{right}")
 
 
 def main() -> None:

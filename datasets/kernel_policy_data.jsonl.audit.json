@@ -1,76 +1,148 @@
 {
   "workspace_root": "/data/lu/ascendc-optim/kernel_workspace/KernelBench910B",
   "output": "/data/lu/ascendc-optim/datasets/kernel_policy_data.jsonl",
+  "system_prompt": "/data/lu/ascendc-optim/datasets/kernel_policy_system_prompt.txt",
+  "dataset_sha256": "7da8fa35c732111b5c6623858082bb3cae82a4ef0907c86133655cea77efeb96",
+  "system_prompt_sha256": "2b27feaf6f5cac2a5bfcf5b3b2c33bc5e2bc3c6c1e99eca84dd3191971cc861c",
+  "canonical_sources_sha256": {
+    "cause_taxonomy": "b56cc9573e135605ed529d7c82f9fae5183683fd60c63e8b5bc3425a3bb6a901",
+    "cause_strategy_mapping": "cb7937b74ffd9dd438b5140e07ab99b272b72aff19a52b4ae1a7957e8d47643e",
+    "operation_slots": "a70478a0c6eecaa398185b7fdf2fc5450b3b6f9d5e207e09dcb2208c1e41be9d"
+  },
   "minimum_reduction_percent_exclusive": 1.0,
-  "candidates": 246,
-  "exported": 71,
-  "excluded": 175,
+  "candidates": 253,
+  "exported": 43,
+  "excluded": 210,
   "items": [
     {
       "ops": "ArgmaxOverADimensionCustom_0",
-      "child_ops": "ArgmaxOverADimensionCustom_1",
-      "eligible": true,
-      "parent_latency_us": 2290693.972,
-      "child_latency_us": 224017.764,
-      "reduction_percent": 90.22052850628447,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13070,
-      "output_chars": 2569
+      "eligible": false,
+      "exclusion_reason": "implementation.modified_files 与父子源码真实 diff 不一致"
     },
     {
       "ops": "ArgmaxOverADimensionCustom_1",
       "child_ops": "ArgmaxOverADimensionCustom_2",
       "eligible": true,
-      "parent_latency_us": 224017.764,
-      "child_latency_us": 79274.156,
-      "reduction_percent": 64.61255813623781,
+      "parent_latency_us": 7684.847,
+      "child_latency_us": 7055.342,
+      "reduction_percent": 8.191509863501514,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14697,
-      "output_chars": 2567
+      "input_chars": 11242,
+      "output_chars": 3353
+    },
+    {
+      "ops": "ArgmaxOverADimensionCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ArgminOverADimensionCustom_0",
       "child_ops": "ArgminOverADimensionCustom_1",
       "eligible": true,
       "parent_latency_us": 2571796.735,
-      "child_latency_us": 272773.53,
-      "reduction_percent": 89.3936590599179,
+      "child_latency_us": 6877.735,
+      "reduction_percent": 99.73257081687679,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13547,
-      "output_chars": 2627
+      "input_chars": 8910,
+      "output_chars": 5187
     },
     {
       "ops": "ArgminOverADimensionCustom_1",
       "child_ops": "ArgminOverADimensionCustom_2",
       "eligible": true,
-      "parent_latency_us": 272773.53,
-      "child_latency_us": 92654.609,
-      "reduction_percent": 66.03240461052067,
+      "parent_latency_us": 6877.735,
+      "child_latency_us": 6059.062,
+      "reduction_percent": 11.903235585552508,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14322,
-      "output_chars": 2566
+      "input_chars": 11194,
+      "output_chars": 4160
+    },
+    {
+      "ops": "ArgminOverADimensionCustom_2",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ArgminOverADimensionCustom_3",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "AveragePooling1dCustom_0",
       "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/AveragePooling1dCustom_1/performance/performance.json'"
+      "exclusion_reason": "implementation.modified_files 与父子源码真实 diff 不一致"
     },
     {
       "ops": "AveragePooling1dCustom_1",
+      "child_ops": "AveragePooling1dCustom_2",
+      "eligible": true,
+      "parent_latency_us": 248169.642,
+      "child_latency_us": 8424.096,
+      "reduction_percent": 96.60550906544808,
+      "threshold_percent": 1.0,
+      "input_chars": 16547,
+      "output_chars": 2239
+    },
+    {
+      "ops": "AveragePooling1dCustom_2",
+      "child_ops": "AveragePooling1dCustom_3",
+      "eligible": false,
+      "parent_latency_us": 8424.096,
+      "child_latency_us": 14967.459,
+      "reduction_percent": -77.67436410981074,
+      "threshold_percent": 1.0,
+      "exclusion_reason": "latency 下降 -77.6743641098% 未严格大于 1.0%"
+    },
+    {
+      "ops": "AveragePooling1dCustom_3",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "AveragePooling2dCustom_0",
+      "child_ops": "AveragePooling2dCustom_1",
+      "eligible": true,
+      "parent_latency_us": 819272.491,
+      "child_latency_us": 45361.893,
+      "reduction_percent": 94.46314950174495,
+      "threshold_percent": 1.0,
+      "input_chars": 11868,
+      "output_chars": 3050
+    },
+    {
+      "ops": "AveragePooling2dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "AveragePooling2dCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "AveragePooling3dCustom_0",
+      "child_ops": "AveragePooling3dCustom_1",
+      "eligible": true,
+      "parent_latency_us": 2914752.823,
+      "child_latency_us": 79230.188,
+      "reduction_percent": 97.28175276562722,
+      "threshold_percent": 1.0,
+      "input_chars": 19918,
+      "output_chars": 4440
+    },
+    {
+      "ops": "AveragePooling3dCustom_1",
+      "child_ops": "AveragePooling3dCustom_2",
+      "eligible": true,
+      "parent_latency_us": 79230.188,
+      "child_latency_us": 58284.21,
+      "reduction_percent": 26.436865200925684,
+      "threshold_percent": 1.0,
+      "input_chars": 13717,
+      "output_chars": 5334
+    },
+    {
+      "ops": "AveragePooling3dCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
@@ -79,63 +151,67 @@
       "child_ops": "BatchedMatrixMultiplicationCustom_1",
       "eligible": true,
       "parent_latency_us": 5544.67,
-      "child_latency_us": 4303.754,
-      "reduction_percent": 22.38034003827099,
+      "child_latency_us": 4259.77,
+      "reduction_percent": 23.173606364310224,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 16553,
-      "output_chars": 2526
+      "input_chars": 11948,
+      "output_chars": 3717
     },
     {
       "ops": "BatchedMatrixMultiplicationCustom_1",
-      "child_ops": "BatchedMatrixMultiplicationCustom_2",
-      "eligible": true,
-      "parent_latency_us": 4303.754,
-      "child_latency_us": 4245.675,
-      "reduction_percent": 1.3494962769712147,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 17056,
-      "output_chars": 2431
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_0",
       "child_ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_1",
       "eligible": true,
       "parent_latency_us": 9626874.315,
-      "child_latency_us": 258855.928,
-      "reduction_percent": 97.3111113791455,
+      "child_latency_us": 19590.763,
+      "reduction_percent": 99.79649923371831,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 12173,
-      "output_chars": 2701
+      "input_chars": 7606,
+      "output_chars": 5246
     },
     {
       "ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_1",
-      "child_ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_2",
-      "eligible": true,
-      "parent_latency_us": 258855.928,
-      "child_latency_us": 56609.109,
-      "reduction_percent": 78.13103627281042,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13451,
-      "output_chars": 2423
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputAsymmetricKernelCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_0",
       "child_ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_1",
       "eligible": true,
       "parent_latency_us": 535129.608,
-      "child_latency_us": 215681.63,
-      "reduction_percent": 59.69544073517233,
+      "child_latency_us": 44419.876,
+      "reduction_percent": 91.69923036663673,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 16170,
-      "output_chars": 2485
+      "input_chars": 11537,
+      "output_chars": 4825
     },
     {
       "ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_1",
+      "child_ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_2",
+      "eligible": true,
+      "parent_latency_us": 44419.876,
+      "child_latency_us": 21657.986,
+      "reduction_percent": 51.242578885181935,
+      "threshold_percent": 1.0,
+      "input_chars": 13047,
+      "output_chars": 3582
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_2",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvDepthwise2dAsymmetricInputSquareKernelCustom_3",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
@@ -144,44 +220,89 @@
       "child_ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_1",
       "eligible": true,
       "parent_latency_us": 69290.936,
-      "child_latency_us": 46949.342,
-      "reduction_percent": 32.243169582815284,
+      "child_latency_us": 2225.149,
+      "reduction_percent": 96.78868676272462,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13561,
-      "output_chars": 2528
+      "input_chars": 8939,
+      "output_chars": 4632
     },
     {
       "ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_1",
       "child_ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_2",
       "eligible": true,
-      "parent_latency_us": 46949.342,
-      "child_latency_us": 2257.495,
-      "reduction_percent": 95.19163655158361,
+      "parent_latency_us": 2225.149,
+      "child_latency_us": 1503.5,
+      "reduction_percent": 32.43149110464063,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14769,
-      "output_chars": 2742
+      "input_chars": 9450,
+      "output_chars": 4521
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_2",
+      "child_ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_3",
+      "eligible": true,
+      "parent_latency_us": 1503.5,
+      "child_latency_us": 1280.851,
+      "reduction_percent": 14.80871300299301,
+      "threshold_percent": 1.0,
+      "input_chars": 9774,
+      "output_chars": 2462
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputAsymmetricKernelCustom_3",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvDepthwise2dSquareInputSquareKernelCustom_0",
       "child_ops": "ConvDepthwise2dSquareInputSquareKernelCustom_1",
       "eligible": true,
       "parent_latency_us": 153476.733,
-      "child_latency_us": 54358.273,
-      "reduction_percent": 64.58207577300983,
+      "child_latency_us": 14645.746,
+      "reduction_percent": 90.45735095234274,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15431,
-      "output_chars": 2346
+      "input_chars": 10803,
+      "output_chars": 4129
     },
     {
       "ops": "ConvDepthwise2dSquareInputSquareKernelCustom_1",
+      "child_ops": "ConvDepthwise2dSquareInputSquareKernelCustom_2",
+      "eligible": true,
+      "parent_latency_us": 14645.746,
+      "child_latency_us": 9791.971,
+      "reduction_percent": 33.14119335402922,
+      "threshold_percent": 1.0,
+      "input_chars": 12828,
+      "output_chars": 2504
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputSquareKernelCustom_2",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvDepthwise2dSquareInputSquareKernelCustom_3",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvDepthwiseSeparable2dCustom_0",
+      "child_ops": "ConvDepthwiseSeparable2dCustom_1",
+      "eligible": true,
+      "parent_latency_us": 6467426.641,
+      "child_latency_us": 205707.844,
+      "reduction_percent": 96.81932466468312,
+      "threshold_percent": 1.0,
+      "input_chars": 17572,
+      "output_chars": 2404
+    },
+    {
+      "ops": "ConvDepthwiseSeparable2dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvDepthwiseSeparable2dCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
@@ -190,532 +311,466 @@
       "child_ops": "ConvPointwise2dCustom_1",
       "eligible": true,
       "parent_latency_us": 14665028.913,
-      "child_latency_us": 13052932.963,
-      "reduction_percent": 10.992790805689706,
+      "child_latency_us": 297277.625,
+      "reduction_percent": 97.97288074395493,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 17430,
-      "output_chars": 2314
+      "input_chars": 12785,
+      "output_chars": 5413
     },
     {
       "ops": "ConvPointwise2dCustom_1",
       "child_ops": "ConvPointwise2dCustom_2",
-      "eligible": false,
-      "parent_latency_us": 13052932.963,
-      "child_latency_us": 13817143.134,
-      "reduction_percent": -5.854700803001435,
+      "eligible": true,
+      "parent_latency_us": 297277.625,
+      "child_latency_us": 271536.756,
+      "reduction_percent": 8.658865261050174,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -5.854700803% 未严格大于 1.0%"
+      "input_chars": 10896,
+      "output_chars": 4104
+    },
+    {
+      "ops": "ConvPointwise2dCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvStandard1dCustom_0",
+      "child_ops": "ConvStandard1dCustom_1",
+      "eligible": true,
+      "parent_latency_us": 33499473.74,
+      "child_latency_us": 223390.371,
+      "reduction_percent": 99.33315259596672,
+      "threshold_percent": 1.0,
+      "input_chars": 9735,
+      "output_chars": 2085
+    },
+    {
+      "ops": "ConvStandard1dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard1dCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvStandard1dDilatedStridedCustom_0",
-      "child_ops": "ConvStandard1dDilatedStridedCustom_1",
-      "eligible": true,
-      "parent_latency_us": 191838563.706,
-      "child_latency_us": 4065738.947,
-      "reduction_percent": 97.88064564889524,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13808,
-      "output_chars": 2485
+      "eligible": false,
+      "exclusion_reason": "真实源码 diff 必须恰好覆盖全部 action target，且不得混入未声明文件"
     },
     {
       "ops": "ConvStandard1dDilatedStridedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard1dDilatedStridedCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_0",
       "child_ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 18113188.799,
-      "child_latency_us": 18263306.779,
-      "reduction_percent": -0.8287772057468326,
+      "child_latency_us": 6642842.061,
+      "reduction_percent": 63.325938161883776,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.828777205747% 未严格大于 1.0%"
+      "input_chars": 15619,
+      "output_chars": 5291
     },
     {
       "ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_1",
       "child_ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_2",
       "eligible": true,
-      "parent_latency_us": 18263306.779,
-      "child_latency_us": 17960990.379,
-      "reduction_percent": 1.6553212605923917,
+      "parent_latency_us": 6642842.061,
+      "child_latency_us": 2112684.546,
+      "reduction_percent": 68.19607441213256,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21580,
-      "output_chars": 2739
+      "input_chars": 13264,
+      "output_chars": 4730
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_2",
+      "child_ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_3",
+      "eligible": true,
+      "parent_latency_us": 2112684.546,
+      "child_latency_us": 2084706.347,
+      "reduction_percent": 1.3242960977289233,
+      "threshold_percent": 1.0,
+      "input_chars": 13463,
+      "output_chars": 3235
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputAsymmetricKernelCustom_3",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_0",
       "child_ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 29981221.856,
-      "child_latency_us": 35581628.599,
-      "reduction_percent": -18.67971482249386,
+      "child_latency_us": 1001625.225,
+      "reduction_percent": 96.65915808965086,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -18.6797148225% 未严格大于 1.0%"
+      "input_chars": 13087,
+      "output_chars": 5063
     },
     {
       "ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_1",
       "child_ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_2",
-      "eligible": false,
-      "parent_latency_us": 35581628.599,
-      "child_latency_us": 35931334.692,
-      "reduction_percent": -0.9828276747563783,
+      "eligible": true,
+      "parent_latency_us": 1001625.225,
+      "child_latency_us": 692258.916,
+      "reduction_percent": 30.886433496121267,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.982827674756% 未严格大于 1.0%"
+      "input_chars": 11697,
+      "output_chars": 6045
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_2",
+      "child_ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_3",
+      "eligible": true,
+      "parent_latency_us": 692258.916,
+      "child_latency_us": 584211.937,
+      "reduction_percent": 15.607885503926097,
+      "threshold_percent": 1.0,
+      "input_chars": 12904,
+      "output_chars": 3514
+    },
+    {
+      "ops": "ConvStandard2dAsymmetricInputSquareKernelCustom_3",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_0",
       "child_ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 12712694.101,
-      "child_latency_us": 34724813.118,
-      "reduction_percent": -173.150701512345,
+      "child_latency_us": 1852235.992,
+      "reduction_percent": 85.43002783450676,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -173.150701512% 未严格大于 1.0%"
+      "input_chars": 11932,
+      "output_chars": 4705
     },
     {
       "ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_1",
       "child_ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_2",
-      "eligible": false,
-      "parent_latency_us": 34724813.118,
-      "child_latency_us": 34586271.526,
-      "reduction_percent": 0.39897001469587623,
+      "eligible": true,
+      "parent_latency_us": 1852235.992,
+      "child_latency_us": 1219182.003,
+      "reduction_percent": 34.17782570548386,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.398970014696% 未严格大于 1.0%"
+      "input_chars": 11096,
+      "output_chars": 1785
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_2",
+      "child_ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_3",
+      "eligible": true,
+      "parent_latency_us": 1219182.003,
+      "child_latency_us": 718608.87,
+      "reduction_percent": 41.05811369986242,
+      "threshold_percent": 1.0,
+      "input_chars": 12194,
+      "output_chars": 3640
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_3",
+      "child_ops": "ConvStandard2dSquareInputAsymmetricKernelCustom_4",
+      "eligible": true,
+      "parent_latency_us": 718608.87,
+      "child_latency_us": 711296.838,
+      "reduction_percent": 1.017525987398403,
+      "threshold_percent": 1.0,
+      "input_chars": 12447,
+      "output_chars": 2794
     },
     {
       "ops": "ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_0",
-      "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_1/performance/performance.json'"
+      "child_ops": "ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_1",
+      "eligible": true,
+      "parent_latency_us": 19026317.734,
+      "child_latency_us": 1403644.298,
+      "reduction_percent": 92.62261716836731,
+      "threshold_percent": 1.0,
+      "input_chars": 28174,
+      "output_chars": 2306
     },
     {
       "ops": "ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard2dSquareInputAsymmetricKernelDilatedPaddedCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvStandard2dSquareInputSquareKernelCustom_0",
       "child_ops": "ConvStandard2dSquareInputSquareKernelCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 51202995.164,
-      "child_latency_us": 51023144.677,
-      "reduction_percent": 0.3512499345476688,
+      "child_latency_us": 1314992.294,
+      "reduction_percent": 97.43180591332955,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.351249934548% 未严格大于 1.0%"
+      "input_chars": 10138,
+      "output_chars": 4659
     },
     {
       "ops": "ConvStandard2dSquareInputSquareKernelCustom_1",
       "child_ops": "ConvStandard2dSquareInputSquareKernelCustom_2",
-      "eligible": false,
-      "parent_latency_us": 51023144.677,
-      "child_latency_us": 51346871.47,
-      "reduction_percent": -0.6344704840309969,
+      "eligible": true,
+      "parent_latency_us": 1314992.294,
+      "child_latency_us": 726914.122,
+      "reduction_percent": 44.72103560479116,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.634470484031% 未严格大于 1.0%"
+      "input_chars": 11399,
+      "output_chars": 3434
+    },
+    {
+      "ops": "ConvStandard2dSquareInputSquareKernelCustom_2",
+      "child_ops": "ConvStandard2dSquareInputSquareKernelCustom_3",
+      "eligible": true,
+      "parent_latency_us": 726914.122,
+      "child_latency_us": 409736.182,
+      "reduction_percent": 43.633481645305,
+      "threshold_percent": 1.0,
+      "input_chars": 12466,
+      "output_chars": 3515
+    },
+    {
+      "ops": "ConvStandard2dSquareInputSquareKernelCustom_3",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_0",
       "child_ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_1",
       "eligible": true,
       "parent_latency_us": 4498294.804,
-      "child_latency_us": 4133085.061,
-      "reduction_percent": 8.118848561798249,
+      "child_latency_us": 891369.637,
+      "reduction_percent": 80.18427702409875,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 23218,
-      "output_chars": 2636
+      "input_chars": 18574,
+      "output_chars": 2448
     },
     {
       "ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_1",
-      "child_ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_2",
-      "eligible": true,
-      "parent_latency_us": 4133085.061,
-      "child_latency_us": 4081242.557,
-      "reduction_percent": 1.2543294714446767,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 23404,
-      "output_chars": 2245
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputAsymmetricKernelCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_0",
       "child_ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 29053520.011,
-      "child_latency_us": 29771882.438,
-      "reduction_percent": -2.472548685075064,
+      "child_latency_us": 558762.819,
+      "reduction_percent": 98.07678099318622,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -2.47254868508% 未严格大于 1.0%"
+      "input_chars": 11306,
+      "output_chars": 3429
     },
     {
       "ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_1",
       "child_ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_2",
-      "eligible": false,
-      "parent_latency_us": 29771882.438,
-      "child_latency_us": 29653751.358,
-      "reduction_percent": 0.3967874058552062,
+      "eligible": true,
+      "parent_latency_us": 558762.819,
+      "child_latency_us": 201110.98,
+      "reduction_percent": 64.0078091881772,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.396787405855% 未严格大于 1.0%"
+      "input_chars": 9876,
+      "output_chars": 3970
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_2",
+      "child_ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_3",
+      "eligible": true,
+      "parent_latency_us": 201110.98,
+      "child_latency_us": 189311.248,
+      "reduction_percent": 5.867273880322207,
+      "threshold_percent": 1.0,
+      "input_chars": 10494,
+      "output_chars": 1841
+    },
+    {
+      "ops": "ConvStandard3dAsymmetricInputSquareKernelCustom_3",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_0",
       "child_ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_1",
       "eligible": true,
       "parent_latency_us": 52304236.181,
-      "child_latency_us": 7959631.987,
-      "reduction_percent": 84.78205099974024,
+      "child_latency_us": 1382191.1,
+      "reduction_percent": 97.35740123377981,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15828,
-      "output_chars": 2473
+      "input_chars": 11184,
+      "output_chars": 4863
     },
     {
       "ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_1",
-      "child_ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_2",
       "eligible": false,
-      "parent_latency_us": 7959631.987,
-      "child_latency_us": 24668802.837,
-      "reduction_percent": -209.92391202621064,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -209.923912026% 未严格大于 1.0%"
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard3dSquareInputAsymmetricKernelCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvStandard3dSquareInputSquareKernelCustom_0",
       "child_ops": "ConvStandard3dSquareInputSquareKernelCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 4631728.658,
-      "child_latency_us": 6800382.069,
-      "reduction_percent": -46.821685187759556,
+      "child_latency_us": 1257215.363,
+      "reduction_percent": 72.85645477464409,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -46.8216851878% 未严格大于 1.0%"
+      "input_chars": 10009,
+      "output_chars": 1915
     },
     {
       "ops": "ConvStandard3dSquareInputSquareKernelCustom_1",
       "child_ops": "ConvStandard3dSquareInputSquareKernelCustom_2",
       "eligible": true,
-      "parent_latency_us": 6800382.069,
-      "child_latency_us": 376071.906,
-      "reduction_percent": 94.46984151501796,
+      "parent_latency_us": 1257215.363,
+      "child_latency_us": 728618.33,
+      "reduction_percent": 42.045066307386506,
       "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15194,
-      "output_chars": 2315
+      "input_chars": 10179,
+      "output_chars": 3493
+    },
+    {
+      "ops": "ConvStandard3dSquareInputSquareKernelCustom_2",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvStandard3dSquareInputSquareKernelCustom_3",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_0",
-      "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_1/performance/performance.json'"
+      "child_ops": "ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_1",
+      "eligible": true,
+      "parent_latency_us": 6683745.379,
+      "child_latency_us": 60842.452,
+      "reduction_percent": 99.08969524495707,
+      "threshold_percent": 1.0,
+      "input_chars": 11841,
+      "output_chars": 3672
     },
     {
       "ops": "ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_1",
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "ConvTransposed1dAsymmetricInputSquareKernelPaddedStridedDilatedCustom_2",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed1dDilatedCustom_0",
-      "child_ops": "ConvTransposed1dDilatedCustom_1",
       "eligible": false,
-      "parent_latency_us": 36118636.089,
-      "child_latency_us": 37365566.356,
-      "reduction_percent": -3.452318254563749,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -3.45231825456% 未严格大于 1.0%"
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvTransposed1dDilatedCustom_1",
-      "child_ops": "ConvTransposed1dDilatedCustom_2",
-      "eligible": true,
-      "parent_latency_us": 37365566.356,
-      "child_latency_us": 25215752.169,
-      "reduction_percent": 32.51607127065274,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14261,
-      "output_chars": 2502
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelCustom_0",
-      "child_ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelCustom_1",
-      "eligible": true,
-      "parent_latency_us": 34234862.867,
-      "child_latency_us": 23103153.059,
-      "reduction_percent": 32.515713152542475,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 25747,
-      "output_chars": 2556
+      "eligible": false,
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelCustom_1",
-      "child_ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelCustom_2",
-      "eligible": true,
-      "parent_latency_us": 23103153.059,
-      "child_latency_us": 21775339.829,
-      "reduction_percent": 5.747324733594064,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 25789,
-      "output_chars": 2417
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelPaddedCustom_0",
       "child_ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelPaddedCustom_1",
-      "eligible": false,
+      "eligible": true,
       "parent_latency_us": 4999297.534,
-      "child_latency_us": 5399895.99,
-      "reduction_percent": -8.013094905345161,
+      "child_latency_us": 439393.407,
+      "reduction_percent": 91.21089705080155,
       "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -8.01309490535% 未严格大于 1.0%"
+      "input_chars": 16540,
+      "output_chars": 2086
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelPaddedCustom_1",
-      "child_ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelPaddedCustom_2",
       "eligible": false,
-      "parent_latency_us": 5399895.99,
-      "child_latency_us": 5369791.731,
-      "reduction_percent": 0.5574970157897531,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.55749701579% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelStridedGroupedPaddedDilatedCustom_0",
-      "child_ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelStridedGroupedPaddedDilatedCustom_1",
       "eligible": false,
-      "parent_latency_us": 14842246.392,
-      "child_latency_us": 16952371.972,
-      "reduction_percent": -14.217022977986405,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -14.217022978% 未严格大于 1.0%"
-    },
-    {
-      "ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelStridedGroupedPaddedDilatedCustom_1",
-      "child_ops": "ConvTransposed2dAsymmetricInputAsymmetricKernelStridedGroupedPaddedDilatedCustom_2",
-      "eligible": false,
-      "parent_latency_us": 16952371.972,
-      "child_latency_us": 17341256.082,
-      "reduction_percent": -2.2939805157786415,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -2.29398051578% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputSquareKernelCustom_0",
-      "child_ops": "ConvTransposed2dAsymmetricInputSquareKernelCustom_1",
-      "eligible": true,
-      "parent_latency_us": 5670464.785,
-      "child_latency_us": 4447347.742,
-      "reduction_percent": 21.569961006291667,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21087,
-      "output_chars": 2842
-    },
-    {
-      "ops": "ConvTransposed2dAsymmetricInputSquareKernelCustom_1",
-      "child_ops": "ConvTransposed2dAsymmetricInputSquareKernelCustom_2",
       "eligible": false,
-      "parent_latency_us": 4447347.742,
-      "child_latency_us": 4708050.833,
-      "reduction_percent": -5.861990249558499,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -5.86199024956% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dAsymmetricInputSquareKernelDilatedPaddedStridedCustom_0",
-      "child_ops": "ConvTransposed2dAsymmetricInputSquareKernelDilatedPaddedStridedCustom_1",
-      "eligible": true,
-      "parent_latency_us": 2493271.244,
-      "child_latency_us": 98972.143,
-      "reduction_percent": 96.03043017328442,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 19831,
-      "output_chars": 3413
-    },
-    {
-      "ops": "ConvTransposed2dAsymmetricInputSquareKernelDilatedPaddedStridedCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dSquareInputAsymmetricKernelCustom_0",
-      "child_ops": "ConvTransposed2dSquareInputAsymmetricKernelCustom_1",
-      "eligible": true,
-      "parent_latency_us": 23012997.72,
-      "child_latency_us": 12882709.123,
-      "reduction_percent": 44.01985660562608,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 28839,
-      "output_chars": 2326
-    },
-    {
-      "ops": "ConvTransposed2dSquareInputAsymmetricKernelCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed2dSquareInputSquareKernelCustom_0",
-      "child_ops": "ConvTransposed2dSquareInputSquareKernelCustom_1",
-      "eligible": true,
-      "parent_latency_us": 42547118.948,
-      "child_latency_us": 38703960.895,
-      "reduction_percent": 9.03271043498152,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 22754,
-      "output_chars": 2694
-    },
-    {
-      "ops": "ConvTransposed2dSquareInputSquareKernelCustom_1",
-      "child_ops": "ConvTransposed2dSquareInputSquareKernelCustom_2",
       "eligible": false,
-      "parent_latency_us": 38703960.895,
-      "child_latency_us": 38821666.884,
-      "reduction_percent": -0.30411871621957426,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.30411871622% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelCustom_0",
-      "child_ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelCustom_1",
-      "eligible": true,
-      "parent_latency_us": 3395981.029,
-      "child_latency_us": 3258919.366,
-      "reduction_percent": 4.0359961327687435,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21691,
-      "output_chars": 2159
-    },
-    {
-      "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelCustom_1",
-      "child_ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelCustom_2",
-      "eligible": true,
-      "parent_latency_us": 3258919.366,
-      "child_latency_us": 2425995.729,
-      "reduction_percent": 25.558276945720543,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 22714,
-      "output_chars": 2194
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelStridedPaddedGroupedCustom_0",
-      "child_ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelStridedPaddedGroupedCustom_1",
       "eligible": false,
-      "parent_latency_us": 912746.163,
-      "child_latency_us": 1773115.714,
-      "reduction_percent": -94.26164533764248,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -94.2616453376% 未严格大于 1.0%"
-    },
-    {
-      "ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelStridedPaddedGroupedCustom_1",
-      "child_ops": "ConvTransposed3dAsymmetricInputAsymmetricKernelStridedPaddedGroupedCustom_2",
-      "eligible": true,
-      "parent_latency_us": 1773115.714,
-      "child_latency_us": 1663831.696,
-      "reduction_percent": 6.163388950711196,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 18735,
-      "output_chars": 2830
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed3dAsymmetricInputSquareKernelCustom_0",
-      "child_ops": "ConvTransposed3dAsymmetricInputSquareKernelCustom_1",
-      "eligible": true,
-      "parent_latency_us": 34241193.661,
-      "child_latency_us": 23054888.603,
-      "reduction_percent": 32.669144565310425,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 20952,
-      "output_chars": 2764
-    },
-    {
-      "ops": "ConvTransposed3dAsymmetricInputSquareKernelCustom_1",
-      "child_ops": "ConvTransposed3dAsymmetricInputSquareKernelCustom_2",
       "eligible": false,
-      "parent_latency_us": 23054888.603,
-      "child_latency_us": 27362637.395,
-      "reduction_percent": -18.68475214163237,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -18.6847521416% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed3dSquareInputAsymmetricKernelCustom_0",
-      "child_ops": "ConvTransposed3dSquareInputAsymmetricKernelCustom_1",
       "eligible": false,
-      "parent_latency_us": 66900528.688,
-      "child_latency_us": 66843170.573,
-      "reduction_percent": 0.08573641512984105,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.0857364151298% 未严格大于 1.0%"
-    },
-    {
-      "ops": "ConvTransposed3dSquareInputAsymmetricKernelCustom_1",
-      "child_ops": "ConvTransposed3dSquareInputAsymmetricKernelCustom_2",
-      "eligible": false,
-      "parent_latency_us": 66843170.573,
-      "child_latency_us": 91983679.466,
-      "reduction_percent": -37.61118552200309,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -37.611185522% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed3dSquareInputSquareKernelCustom_0",
-      "child_ops": "ConvTransposed3dSquareInputSquareKernelCustom_1",
       "eligible": false,
-      "parent_latency_us": 20993775.964,
-      "child_latency_us": 20880303.691,
-      "reduction_percent": 0.5405043532644317,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.540504353264% 未严格大于 1.0%"
-    },
-    {
-      "ops": "ConvTransposed3dSquareInputSquareKernelCustom_1",
-      "child_ops": "ConvTransposed3dSquareInputSquareKernelCustom_2",
-      "eligible": true,
-      "parent_latency_us": 20880303.691,
-      "child_latency_us": 14132933.504,
-      "reduction_percent": 32.314521315646886,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21613,
-      "output_chars": 2628
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTransposed3dSquareInputSquareKernelPaddedDilatedStridedCustom_0",
-      "child_ops": "ConvTransposed3dSquareInputSquareKernelPaddedDilatedStridedCustom_1",
-      "eligible": true,
-      "parent_latency_us": 11897695.704,
-      "child_latency_us": 11153130.621,
-      "reduction_percent": 6.2580612374350615,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 18142,
-      "output_chars": 2996
-    },
-    {
-      "ops": "ConvTransposed3dSquareInputSquareKernelPaddedDilatedStridedCustom_1",
-      "child_ops": "ConvTransposed3dSquareInputSquareKernelPaddedDilatedStridedCustom_2",
-      "eligible": true,
-      "parent_latency_us": 11153130.621,
-      "child_latency_us": 10890032.557,
-      "reduction_percent": 2.358961559229096,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 18327,
-      "output_chars": 2309
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "CrossEntropyLossCustom_0",
@@ -724,75 +779,21 @@
     },
     {
       "ops": "CumprodCustom_0",
-      "child_ops": "CumprodCustom_1",
-      "eligible": true,
-      "parent_latency_us": 702430.925,
-      "child_latency_us": 468703.555,
-      "reduction_percent": 33.27407175303394,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14327,
-      "output_chars": 2510
-    },
-    {
-      "ops": "CumprodCustom_1",
-      "child_ops": "CumprodCustom_2",
       "eligible": false,
-      "parent_latency_us": 468703.555,
-      "child_latency_us": 503575.119,
-      "reduction_percent": -7.440004162119064,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -7.44000416212% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "CumsumCustom_0",
-      "child_ops": "CumsumCustom_1",
-      "eligible": true,
-      "parent_latency_us": 466117.107,
-      "child_latency_us": 130134.24,
-      "reduction_percent": 72.08121348783708,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13319,
-      "output_chars": 2216
-    },
-    {
-      "ops": "CumsumCustom_1",
-      "child_ops": "CumsumCustom_2",
       "eligible": false,
-      "parent_latency_us": 130134.24,
-      "child_latency_us": 498143.287,
-      "reduction_percent": -282.79186707510644,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -282.791867075% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "CumsumExclusiveCustom_0",
-      "child_ops": "CumsumExclusiveCustom_1",
       "eligible": false,
-      "parent_latency_us": 444852.932,
-      "child_latency_us": 496272.385,
-      "reduction_percent": -11.5587533095095,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -11.5587533095% 未严格大于 1.0%"
-    },
-    {
-      "ops": "CumsumExclusiveCustom_1",
-      "child_ops": "CumsumExclusiveCustom_2",
-      "eligible": false,
-      "parent_latency_us": 496272.385,
-      "child_latency_us": 963445.11,
-      "reduction_percent": -94.13635316420034,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -94.1363531642% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "CumsumReverseCustom_0",
-      "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/CumsumReverseCustom_1/performance/performance.json'"
-    },
-    {
-      "ops": "CumsumReverseCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
@@ -803,49 +804,13 @@
     },
     {
       "ops": "FrobeniusNormCustom_0",
-      "child_ops": "FrobeniusNormCustom_1",
-      "eligible": true,
-      "parent_latency_us": 334270.481,
-      "child_latency_us": 17575.429,
-      "reduction_percent": 94.74215343591766,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13654,
-      "output_chars": 2725
-    },
-    {
-      "ops": "FrobeniusNormCustom_1",
-      "child_ops": "FrobeniusNormCustom_2",
       "eligible": false,
-      "parent_latency_us": 17575.429,
-      "child_latency_us": 17591.589,
-      "reduction_percent": -0.09194654651104024,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.091946546511% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "GeluCustom_0",
-      "child_ops": "GeluCustom_1",
-      "eligible": true,
-      "parent_latency_us": 15020.46,
-      "child_latency_us": 14446.951,
-      "reduction_percent": 3.8181853285451983,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13105,
-      "output_chars": 2062
-    },
-    {
-      "ops": "GeluCustom_1",
-      "child_ops": "GeluCustom_2",
-      "eligible": true,
-      "parent_latency_us": 14446.951,
-      "child_latency_us": 12200.016,
-      "reduction_percent": 15.55300492124601,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13475,
-      "output_chars": 1819
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "GroupNormCustom_0",
@@ -864,57 +829,18 @@
     },
     {
       "ops": "InstanceNormCustom_0",
-      "child_ops": "InstanceNormCustom_1",
-      "eligible": true,
-      "parent_latency_us": 18610.828,
-      "child_latency_us": 13693.947,
-      "reduction_percent": 26.419463980861043,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 16636,
-      "output_chars": 2318
-    },
-    {
-      "ops": "InstanceNormCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "L2NormCustom_0",
-      "child_ops": "L2NormCustom_1",
-      "eligible": true,
-      "parent_latency_us": 36482.291,
-      "child_latency_us": 15677.767,
-      "reduction_percent": 57.02636383224946,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14720,
-      "output_chars": 2319
-    },
-    {
-      "ops": "L2NormCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "LayerNormCustom_0",
-      "child_ops": "LayerNormCustom_1",
       "eligible": false,
-      "parent_latency_us": 914.102,
-      "child_latency_us": 909.802,
-      "reduction_percent": 0.4704070224110608,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.470407022411% 未严格大于 1.0%"
-    },
-    {
-      "ops": "LayerNormCustom_1",
-      "child_ops": "LayerNormCustom_2",
-      "eligible": false,
-      "parent_latency_us": 909.802,
-      "child_latency_us": 904.922,
-      "reduction_percent": 0.5363804432173148,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.536380443217% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "LeakyReluCustom_0",
@@ -933,175 +859,48 @@
     },
     {
       "ops": "MatmulForLowerTriangularMatricesCustom_0",
-      "child_ops": "MatmulForLowerTriangularMatricesCustom_1",
-      "eligible": true,
-      "parent_latency_us": 37573.849,
-      "child_latency_us": 3237.255,
-      "reduction_percent": 91.38428698108623,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 17856,
-      "output_chars": 3058
-    },
-    {
-      "ops": "MatmulForLowerTriangularMatricesCustom_1",
-      "child_ops": "MatmulForLowerTriangularMatricesCustom_2",
       "eligible": false,
-      "parent_latency_us": 3237.255,
-      "child_latency_us": 3236.995,
-      "reduction_percent": 0.00803149581976762,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.00803149581977% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulForSymmetricMatricesCustom_0",
-      "child_ops": "MatmulForSymmetricMatricesCustom_1",
       "eligible": false,
-      "parent_latency_us": 37424.213,
-      "child_latency_us": 37427.132,
-      "reduction_percent": -0.007799763217450724,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.00779976321745% 未严格大于 1.0%"
-    },
-    {
-      "ops": "MatmulForSymmetricMatricesCustom_1",
-      "child_ops": "MatmulForSymmetricMatricesCustom_2",
-      "eligible": true,
-      "parent_latency_us": 37427.132,
-      "child_latency_us": 3209.516,
-      "reduction_percent": 91.42462746010033,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15569,
-      "output_chars": 2575
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulForUpperTriangularMatricesCustom_0",
-      "child_ops": "MatmulForUpperTriangularMatricesCustom_1",
-      "eligible": true,
-      "parent_latency_us": 37528.13,
-      "child_latency_us": 3215.755,
-      "reduction_percent": 91.43108116498212,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 18446,
-      "output_chars": 2789
-    },
-    {
-      "ops": "MatmulForUpperTriangularMatricesCustom_1",
-      "child_ops": "MatmulForUpperTriangularMatricesCustom_2",
       "eligible": false,
-      "parent_latency_us": 3215.755,
-      "child_latency_us": 3211.535,
-      "reduction_percent": 0.131228902699374,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.131228902699% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulWithIrregularShapesCustom_0",
-      "child_ops": "MatmulWithIrregularShapesCustom_1",
       "eligible": false,
-      "parent_latency_us": 169638.53,
-      "child_latency_us": 176814.667,
-      "reduction_percent": -4.230251818381111,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -4.23025181838% 未严格大于 1.0%"
-    },
-    {
-      "ops": "MatmulWithIrregularShapesCustom_1",
-      "child_ops": "MatmulWithIrregularShapesCustom_2",
-      "eligible": true,
-      "parent_latency_us": 176814.667,
-      "child_latency_us": 171479.934,
-      "reduction_percent": 3.0171326228270297,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15553,
-      "output_chars": 2273
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulWithLargeKDimensionCustom_0",
-      "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/MatmulWithLargeKDimensionCustom_1/performance/performance.json'"
-    },
-    {
-      "ops": "MatmulWithLargeKDimensionCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulWithSmallKDimensionCustom_0",
       "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/MatmulWithSmallKDimensionCustom_1/performance/performance.json'"
-    },
-    {
-      "ops": "MatmulWithSmallKDimensionCustom_1",
-      "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulWithTransposedACustom_0",
-      "child_ops": "MatmulWithTransposedACustom_1",
       "eligible": false,
-      "parent_latency_us": 37339.534,
-      "child_latency_us": 37337.894,
-      "reduction_percent": 0.004392127657510182,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.00439212765751% 未严格大于 1.0%"
-    },
-    {
-      "ops": "MatmulWithTransposedACustom_1",
-      "child_ops": "MatmulWithTransposedACustom_2",
-      "eligible": false,
-      "parent_latency_us": 37337.894,
-      "child_latency_us": 43214.257,
-      "reduction_percent": -15.738335429416553,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -15.7383354294% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulWithTransposedBCustom_0",
-      "child_ops": "MatmulWithTransposedBCustom_1",
       "eligible": false,
-      "parent_latency_us": 37612.769,
-      "child_latency_us": 37631.208,
-      "reduction_percent": -0.049023245270770906,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.0490232452708% 未严格大于 1.0%"
-    },
-    {
-      "ops": "MatmulWithTransposedBCustom_1",
-      "child_ops": "MatmulWithTransposedBCustom_2",
-      "eligible": true,
-      "parent_latency_us": 37631.208,
-      "child_latency_us": 2443.712,
-      "reduction_percent": 93.5061558480929,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14849,
-      "output_chars": 2299
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulWithTransposedBothCustom_0",
-      "child_ops": "MatmulWithTransposedBothCustom_1",
-      "eligible": true,
-      "parent_latency_us": 37426.272,
-      "child_latency_us": 2067.899,
-      "reduction_percent": 94.47473956262597,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15087,
-      "output_chars": 2480
-    },
-    {
-      "ops": "MatmulWithTransposedBothCustom_1",
-      "child_ops": "MatmulWithTransposedBothCustom_2",
       "eligible": false,
-      "parent_latency_us": 2067.899,
-      "child_latency_us": 3894.882,
-      "reduction_percent": -88.34972114208674,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -88.3497211421% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatrixScalarMultiplicationCustom_0",
@@ -1110,35 +909,11 @@
     },
     {
       "ops": "MatrixVectorMultiplicationCustom_0",
-      "child_ops": "MatrixVectorMultiplicationCustom_1",
-      "eligible": true,
-      "parent_latency_us": 1392011.208,
-      "child_latency_us": 227418.516,
-      "reduction_percent": 83.6625944753169,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13695,
-      "output_chars": 2315
-    },
-    {
-      "ops": "MatrixVectorMultiplicationCustom_1",
-      "child_ops": "MatrixVectorMultiplicationCustom_2",
-      "eligible": true,
-      "parent_latency_us": 227418.516,
-      "child_latency_us": 208408.176,
-      "reduction_percent": 8.359187428696439,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13823,
-      "output_chars": 2091
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MaxPooling1dCustom_0",
-      "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level1/MaxPooling1dCustom_1/performance/performance.json'"
-    },
-    {
-      "ops": "MaxPooling1dCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
@@ -1149,218 +924,56 @@
     },
     {
       "ops": "MaxPooling3dCustom_0",
-      "child_ops": "MaxPooling3dCustom_1",
       "eligible": false,
-      "parent_latency_us": 1079452.932,
-      "child_latency_us": 1755517.905,
-      "reduction_percent": -62.63033365867962,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -62.6303336587% 未严格大于 1.0%"
-    },
-    {
-      "ops": "MaxPooling3dCustom_1",
-      "child_ops": "MaxPooling3dCustom_2",
-      "eligible": true,
-      "parent_latency_us": 1755517.905,
-      "child_latency_us": 109821.526,
-      "reduction_percent": 93.74420929076197,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 16368,
-      "output_chars": 2368
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MaxReductionOverADimensionCustom_0",
-      "child_ops": "MaxReductionOverADimensionCustom_1",
-      "eligible": true,
-      "parent_latency_us": 785975.896,
-      "child_latency_us": 18789.324,
-      "reduction_percent": 97.60942745246733,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 16135,
-      "output_chars": 2261
-    },
-    {
-      "ops": "MaxReductionOverADimensionCustom_1",
-      "child_ops": "MaxReductionOverADimensionCustom_2",
-      "eligible": true,
-      "parent_latency_us": 18789.324,
-      "child_latency_us": 16956.002,
-      "reduction_percent": 9.757253640418357,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13227,
-      "output_chars": 2581
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MeanReductionOverADimensionCustom_0",
-      "child_ops": "MeanReductionOverADimensionCustom_1",
-      "eligible": true,
-      "parent_latency_us": 2121735.188,
-      "child_latency_us": 1088591.95,
-      "reduction_percent": 48.69331685891803,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13636,
-      "output_chars": 2480
-    },
-    {
-      "ops": "MeanReductionOverADimensionCustom_1",
-      "child_ops": "MeanReductionOverADimensionCustom_2",
-      "eligible": true,
-      "parent_latency_us": 1088591.95,
-      "child_latency_us": 17196.497,
-      "reduction_percent": 98.42029908451923,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13847,
-      "output_chars": 2379
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MinGptNewGeluCustom_0",
-      "child_ops": "MinGptNewGeluCustom_1",
-      "eligible": true,
-      "parent_latency_us": 650.167,
-      "child_latency_us": 438.632,
-      "reduction_percent": 32.535487036407574,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13476,
-      "output_chars": 2265
-    },
-    {
-      "ops": "MinGptNewGeluCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MinReductionOverADimensionCustom_0",
-      "child_ops": "MinReductionOverADimensionCustom_1",
-      "eligible": true,
-      "parent_latency_us": 6351.174,
-      "child_latency_us": 4360.073,
-      "reduction_percent": 31.35012518945316,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13921,
-      "output_chars": 2283
-    },
-    {
-      "ops": "MinReductionOverADimensionCustom_1",
-      "child_ops": "MinReductionOverADimensionCustom_2",
       "eligible": false,
-      "parent_latency_us": 4360.073,
-      "child_latency_us": 17132.097,
-      "reduction_percent": -292.9314256894323,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -292.931425689% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ReluCustom_0",
-      "child_ops": "ReluCustom_1",
-      "eligible": false,
-      "parent_latency_us": 10296.355,
-      "child_latency_us": 10252.215,
-      "reduction_percent": 0.42869539754601915,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.428695397546% 未严格大于 1.0%"
-    },
-    {
-      "ops": "ReluCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "RmsNormCustom_0",
-      "child_ops": "RmsNormCustom_1",
-      "eligible": true,
-      "parent_latency_us": 1587314.406,
-      "child_latency_us": 73530.151,
-      "reduction_percent": 95.36763789693723,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 15749,
-      "output_chars": 2037
-    },
-    {
-      "ops": "RmsNormCustom_1",
-      "child_ops": "RmsNormCustom_2",
       "eligible": false,
-      "parent_latency_us": 73530.151,
-      "child_latency_us": 73447.932,
-      "reduction_percent": 0.11181671583946198,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.111816715839% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "SeluCustom_0",
-      "child_ops": "SeluCustom_1",
-      "eligible": true,
-      "parent_latency_us": 10569.069,
-      "child_latency_us": 10095.378,
-      "reduction_percent": 4.481861174338051,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13240,
-      "output_chars": 2242
-    },
-    {
-      "ops": "SeluCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "SigmoidCustom_0",
-      "child_ops": "SigmoidCustom_1",
-      "eligible": true,
-      "parent_latency_us": 10597.968,
-      "child_latency_us": 10128.917,
-      "reduction_percent": 4.425857862563854,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 13604,
-      "output_chars": 2217
-    },
-    {
-      "ops": "SigmoidCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "SoftmaxCustom_0",
-      "child_ops": "SoftmaxCustom_1",
-      "eligible": true,
-      "parent_latency_us": 15180.317,
-      "child_latency_us": 10699.007,
-      "reduction_percent": 29.5205297754981,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21286,
-      "output_chars": 2298
-    },
-    {
-      "ops": "SoftmaxCustom_1",
-      "child_ops": "SoftmaxCustom_2",
       "eligible": false,
-      "parent_latency_us": 10699.007,
-      "child_latency_us": 10864.883,
-      "reduction_percent": -1.5503868723518006,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -1.55038687235% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "SoftplusCustom_0",
-      "child_ops": "SoftplusCustom_1",
-      "eligible": false,
-      "parent_latency_us": 10175.216,
-      "child_latency_us": 10131.258,
-      "reduction_percent": 0.432010485084548,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.432010485085% 未严格大于 1.0%"
-    },
-    {
-      "ops": "SoftplusCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
@@ -1371,45 +984,13 @@
     },
     {
       "ops": "SquareMatrixMultiplicationCustom_0",
-      "child_ops": "SquareMatrixMultiplicationCustom_1",
       "eligible": false,
-      "parent_latency_us": 37420.413,
-      "child_latency_us": 37405.532,
-      "reduction_percent": 0.039767065104282046,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.0397670651043% 未严格大于 1.0%"
-    },
-    {
-      "ops": "SquareMatrixMultiplicationCustom_1",
-      "child_ops": "SquareMatrixMultiplicationCustom_2",
-      "eligible": false,
-      "parent_latency_us": 37405.532,
-      "child_latency_us": 37427.672,
-      "reduction_percent": -0.059189106039180026,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.0591891060392% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "StandardMatrixMultiplicationCustom_0",
-      "child_ops": "StandardMatrixMultiplicationCustom_1",
       "eligible": false,
-      "parent_latency_us": 37409.992,
-      "child_latency_us": 37396.073,
-      "reduction_percent": 0.03720663720003385,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.0372066372% 未严格大于 1.0%"
-    },
-    {
-      "ops": "StandardMatrixMultiplicationCustom_1",
-      "child_ops": "StandardMatrixMultiplicationCustom_2",
-      "eligible": true,
-      "parent_latency_us": 37396.073,
-      "child_latency_us": 9429.312,
-      "reduction_percent": 74.78528828414684,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 14965,
-      "output_chars": 2301
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "SumReductionOverADimensionCustom_0",
@@ -1418,38 +999,13 @@
     },
     {
       "ops": "SwishCustom_0",
-      "child_ops": "SwishCustom_1",
-      "eligible": false,
-      "parent_latency_us": 10222.676,
-      "child_latency_us": 10181.956,
-      "reduction_percent": 0.3983301436923106,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.398330143692% 未严格大于 1.0%"
-    },
-    {
-      "ops": "SwishCustom_1",
       "eligible": false,
       "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "TallSkinnyMatrixMultiplicationCustom_0",
-      "child_ops": "TallSkinnyMatrixMultiplicationCustom_1",
       "eligible": false,
-      "parent_latency_us": 28306.194,
-      "child_latency_us": 28409.953,
-      "reduction_percent": -0.36655934739937784,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.366559347399% 未严格大于 1.0%"
-    },
-    {
-      "ops": "TallSkinnyMatrixMultiplicationCustom_1",
-      "child_ops": "TallSkinnyMatrixMultiplicationCustom_2",
-      "eligible": false,
-      "parent_latency_us": 28409.953,
-      "child_latency_us": 28562.709,
-      "reduction_percent": -0.5376848036320144,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.537684803632% 未严格大于 1.0%"
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "TanhCustom_0",
@@ -1473,18 +1029,18 @@
     },
     {
       "ops": "Conv2dGeluGlobalAvgPoolCustom_0",
-      "child_ops": "Conv2dGeluGlobalAvgPoolCustom_1",
       "eligible": false,
-      "parent_latency_us": 29278955.526,
-      "child_latency_us": 33912148.975,
-      "reduction_percent": -15.824312601881168,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -15.8243126019% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dGeluGlobalAvgPoolCustom_1",
       "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level2/Conv2dGeluGlobalAvgPoolCustom_2/performance/performance.json'"
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
+    },
+    {
+      "ops": "Conv2dGeluGlobalAvgPoolCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv2dGroupNormScaleMaxPoolClampCustom_0",
@@ -1493,13 +1049,8 @@
     },
     {
       "ops": "Conv2dHardSwishReluCustom_0",
-      "child_ops": "Conv2dHardSwishReluCustom_1",
       "eligible": false,
-      "parent_latency_us": 6130737.208,
-      "child_latency_us": 7364453.178,
-      "reduction_percent": -20.123452174562704,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -20.1234521746% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dHardSwishReluCustom_1",
@@ -1513,69 +1064,48 @@
     },
     {
       "ops": "Conv2dMinTanhTanhCustom_0",
-      "child_ops": "Conv2dMinTanhTanhCustom_1",
       "eligible": false,
-      "parent_latency_us": 25132465.813,
-      "child_latency_us": 31806500.006,
-      "reduction_percent": -26.55542931067191,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -26.5554293107% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dMinTanhTanhCustom_1",
-      "child_ops": "Conv2dMinTanhTanhCustom_2",
-      "eligible": true,
-      "parent_latency_us": 31806500.006,
-      "child_latency_us": 23892701.004,
-      "reduction_percent": 24.881074624706066,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 19619,
-      "output_chars": 2456
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv2dMinTanhTanhCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv2dMishMishCustom_0",
-      "child_ops": "Conv2dMishMishCustom_1",
-      "eligible": true,
-      "parent_latency_us": 38212943.125,
-      "child_latency_us": 36116224.358,
-      "reduction_percent": 5.486933472099572,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21797,
-      "output_chars": 2362
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dMishMishCustom_1",
-      "child_ops": "Conv2dMishMishCustom_2",
       "eligible": false,
-      "parent_latency_us": 36116224.358,
-      "child_latency_us": 68885793.321,
-      "reduction_percent": -90.73365099899014,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -90.733650999% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv2dMishMishCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv2dMultiplyLeakyReluGeluCustom_0",
-      "child_ops": "Conv2dMultiplyLeakyReluGeluCustom_1",
-      "eligible": true,
-      "parent_latency_us": 31160667.289,
-      "child_latency_us": 27209821.788,
-      "reduction_percent": 12.678950243131304,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21708,
-      "output_chars": 2933
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dMultiplyLeakyReluGeluCustom_1",
-      "child_ops": "Conv2dMultiplyLeakyReluGeluCustom_2",
       "eligible": false,
-      "parent_latency_us": 27209821.788,
-      "child_latency_us": 27037780.685,
-      "reduction_percent": 0.6322757434444984,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.632275743444% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv2dMultiplyLeakyReluGeluCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv2dReluBiasAddCustom_0",
@@ -1584,13 +1114,8 @@
     },
     {
       "ops": "Conv2dReluHardSwishCustom_0",
-      "child_ops": "Conv2dReluHardSwishCustom_1",
       "eligible": false,
-      "parent_latency_us": 6135640.11,
-      "child_latency_us": 7661260.008,
-      "reduction_percent": -24.864885662272,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -24.8648856623% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dReluHardSwishCustom_1",
@@ -1609,25 +1134,18 @@
     },
     {
       "ops": "Conv2dSubtractSubtractMishCustom_0",
-      "child_ops": "Conv2dSubtractSubtractMishCustom_1",
       "eligible": false,
-      "parent_latency_us": 4646318.466,
-      "child_latency_us": 4801636.123,
-      "reduction_percent": -3.342811263079694,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -3.34281126308% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv2dSubtractSubtractMishCustom_1",
-      "child_ops": "Conv2dSubtractSubtractMishCustom_2",
-      "eligible": true,
-      "parent_latency_us": 4801636.123,
-      "child_latency_us": 2756504.525,
-      "reduction_percent": 42.59239029387817,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 22393,
-      "output_chars": 2393
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv2dSubtractSubtractMishCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv2dSubtractTanhSubtractAvgPoolCustom_0",
@@ -1642,7 +1160,7 @@
     {
       "ops": "Conv3dDivideMaxGlobalAvgPoolBiasAddSumCustom_0",
       "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level2/Conv3dDivideMaxGlobalAvgPoolBiasAddSumCustom_1/performance/performance.json'"
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "Conv3dDivideMaxGlobalAvgPoolBiasAddSumCustom_1",
@@ -1661,45 +1179,33 @@
     },
     {
       "ops": "Conv3dLeakyReluSumClampGeluCustom_0",
-      "child_ops": "Conv3dLeakyReluSumClampGeluCustom_1",
-      "eligible": true,
-      "parent_latency_us": 69327219.682,
-      "child_latency_us": 67713919.076,
-      "reduction_percent": 2.327081070609941,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 22525,
-      "output_chars": 2095
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv3dLeakyReluSumClampGeluCustom_1",
-      "child_ops": "Conv3dLeakyReluSumClampGeluCustom_2",
       "eligible": false,
-      "parent_latency_us": 67713919.076,
-      "child_latency_us": 67629473.943,
-      "reduction_percent": 0.12470867755449618,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.124708677554% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv3dLeakyReluSumClampGeluCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv3dMinSoftmaxCustom_0",
-      "child_ops": "Conv3dMinSoftmaxCustom_1",
       "eligible": false,
-      "parent_latency_us": 1433746.593,
-      "child_latency_us": 1425146.826,
-      "reduction_percent": 0.5998108063159124,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.599810806316% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv3dMinSoftmaxCustom_1",
-      "child_ops": "Conv3dMinSoftmaxCustom_2",
       "eligible": false,
-      "parent_latency_us": 1425146.826,
-      "child_latency_us": 2436448.26,
-      "reduction_percent": -70.96121013990175,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -70.9612101399% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv3dMinSoftmaxCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv3dMishTanhCustom_0",
@@ -1708,63 +1214,48 @@
     },
     {
       "ops": "Conv3dReluLeakyReluGeluSigmoidBiasAddCustom_0",
-      "child_ops": "Conv3dReluLeakyReluGeluSigmoidBiasAddCustom_1",
       "eligible": false,
-      "parent_latency_us": 37199007.044,
-      "child_latency_us": 37260251.24,
-      "reduction_percent": -0.16463933009706688,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.164639330097% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv3dReluLeakyReluGeluSigmoidBiasAddCustom_1",
-      "child_ops": "Conv3dReluLeakyReluGeluSigmoidBiasAddCustom_2",
       "eligible": false,
-      "parent_latency_us": 37260251.24,
-      "child_latency_us": 41153067.462,
-      "reduction_percent": -10.44763814641416,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -10.4476381464% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv3dReluLeakyReluGeluSigmoidBiasAddCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv3dScalingTanhMultiplySigmoidCustom_0",
-      "child_ops": "Conv3dScalingTanhMultiplySigmoidCustom_1",
       "eligible": false,
-      "parent_latency_us": 6850002.637,
-      "child_latency_us": 8703570.343,
-      "reduction_percent": -27.05937215247236,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -27.0593721525% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv3dScalingTanhMultiplySigmoidCustom_1",
-      "child_ops": "Conv3dScalingTanhMultiplySigmoidCustom_2",
       "eligible": false,
-      "parent_latency_us": 8703570.343,
-      "child_latency_us": 8682653.661,
-      "reduction_percent": 0.24032300740606571,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.240323007406% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv3dScalingTanhMultiplySigmoidCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "Conv3dSoftmaxMaxPoolMaxPoolCustom_0",
-      "child_ops": "Conv3dSoftmaxMaxPoolMaxPoolCustom_1",
       "eligible": false,
-      "parent_latency_us": 161721.989,
-      "child_latency_us": 162462.874,
-      "reduction_percent": -0.45812261188551745,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.458122611886% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "Conv3dSoftmaxMaxPoolMaxPoolCustom_1",
-      "child_ops": "Conv3dSoftmaxMaxPoolMaxPoolCustom_2",
       "eligible": false,
-      "parent_latency_us": 162462.874,
-      "child_latency_us": 162447.694,
-      "reduction_percent": 0.009343673189003242,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.009343673189% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "Conv3dSoftmaxMaxPoolMaxPoolCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTranspose2dAddMinGeluMultiplyCustom_0",
@@ -1793,27 +1284,18 @@
     },
     {
       "ops": "ConvTranspose2dMultiplyGlobalAvgPoolGlobalAvgPoolMeanCustom_0",
-      "child_ops": "ConvTranspose2dMultiplyGlobalAvgPoolGlobalAvgPoolMeanCustom_1",
-      "eligible": true,
-      "parent_latency_us": 135502.793,
-      "child_latency_us": 9303.534,
-      "reduction_percent": 93.13406477163906,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21045,
-      "output_chars": 2229
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "ConvTranspose2dMultiplyGlobalAvgPoolGlobalAvgPoolMeanCustom_1",
-      "child_ops": "ConvTranspose2dMultiplyGlobalAvgPoolGlobalAvgPoolMeanCustom_2",
-      "eligible": true,
-      "parent_latency_us": 9303.534,
-      "child_latency_us": 1095.738,
-      "reduction_percent": 88.22234647608103,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21341,
-      "output_chars": 1822
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "ConvTranspose2dMultiplyGlobalAvgPoolGlobalAvgPoolMeanCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTranspose2dSoftmaxBiasAddScalingSigmoidCustom_0",
@@ -1827,25 +1309,18 @@
     },
     {
       "ops": "ConvTranspose3dLeakyReluMultiplyLeakyReluMaxCustom_0",
-      "child_ops": "ConvTranspose3dLeakyReluMultiplyLeakyReluMaxCustom_1",
       "eligible": false,
-      "parent_latency_us": 8538711.077,
-      "child_latency_us": 8587228.827,
-      "reduction_percent": -0.5682092948511648,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.568209294851% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "ConvTranspose3dLeakyReluMultiplyLeakyReluMaxCustom_1",
-      "child_ops": "ConvTranspose3dLeakyReluMultiplyLeakyReluMaxCustom_2",
-      "eligible": true,
-      "parent_latency_us": 8587228.827,
-      "child_latency_us": 5873300.211,
-      "reduction_percent": 31.604242424131684,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 21813,
-      "output_chars": 2135
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "ConvTranspose3dLeakyReluMultiplyLeakyReluMaxCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTranspose3dLogSumExpHardSwishSubtractClampCustom_0",
@@ -1859,25 +1334,18 @@
     },
     {
       "ops": "ConvTranspose3dMultiplyMaxGlobalAvgPoolClampCustom_0",
-      "child_ops": "ConvTranspose3dMultiplyMaxGlobalAvgPoolClampCustom_1",
-      "eligible": true,
-      "parent_latency_us": 1600352.025,
-      "child_latency_us": 1081120.939,
-      "reduction_percent": 32.44480451105749,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 23451,
-      "output_chars": 2287
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "ConvTranspose3dMultiplyMaxGlobalAvgPoolClampCustom_1",
-      "child_ops": "ConvTranspose3dMultiplyMaxGlobalAvgPoolClampCustom_2",
       "eligible": false,
-      "parent_latency_us": 1081120.939,
-      "child_latency_us": 1078540.031,
-      "reduction_percent": 0.23872518854248684,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.238725188542% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "ConvTranspose3dMultiplyMaxGlobalAvgPoolClampCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTranspose3dScalingAvgPoolBiasAddScalingCustom_0",
@@ -1886,25 +1354,18 @@
     },
     {
       "ops": "ConvTranspose3dSoftmaxSigmoidCustom_0",
-      "child_ops": "ConvTranspose3dSoftmaxSigmoidCustom_1",
-      "eligible": true,
-      "parent_latency_us": 15684809.197,
-      "child_latency_us": 14510491.5,
-      "reduction_percent": 7.486974704318429,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 17951,
-      "output_chars": 2091
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "ConvTranspose3dSoftmaxSigmoidCustom_1",
-      "child_ops": "ConvTranspose3dSoftmaxSigmoidCustom_2",
       "eligible": false,
-      "parent_latency_us": 14510491.5,
-      "child_latency_us": 14443452.72,
-      "reduction_percent": 0.46200213135440193,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 0.462002131354% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "ConvTranspose3dSoftmaxSigmoidCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "ConvTranspose3dSumResidualAddMultiplyResidualAddCustom_0",
@@ -1983,25 +1444,18 @@
     },
     {
       "ops": "MatmulGeluSoftmaxCustom_0",
-      "child_ops": "MatmulGeluSoftmaxCustom_1",
-      "eligible": true,
-      "parent_latency_us": 2697014.034,
-      "child_latency_us": 1390566.756,
-      "reduction_percent": 48.440507225035816,
-      "threshold_percent": 1.0,
-      "policy_knowledge_sha256": "75a7411ba11a48c4122cfc3b20842175760cfe90aba224f89d57a71dfe7f4c8c",
-      "input_chars": 23302,
-      "output_chars": 1882
+      "eligible": false,
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
     },
     {
       "ops": "MatmulGeluSoftmaxCustom_1",
-      "child_ops": "MatmulGeluSoftmaxCustom_2",
       "eligible": false,
-      "parent_latency_us": 1390566.756,
-      "child_latency_us": 1395462.599,
-      "reduction_percent": -0.35207536631199865,
-      "threshold_percent": 1.0,
-      "exclusion_reason": "latency 下降 -0.352075366312% 未严格大于 1.0%"
+      "exclusion_reason": "父版本 bottleneck 或 strategy 为空"
+    },
+    {
+      "ops": "MatmulGeluSoftmaxCustom_2",
+      "eligible": false,
+      "exclusion_reason": "对应子版本不存在"
     },
     {
       "ops": "MatmulGroupNormLeakyReluSumCustom_0",
@@ -2016,7 +1470,7 @@
     {
       "ops": "MatmulMishMishCustom_0",
       "eligible": false,
-      "exclusion_reason": "[Errno 2] No such file or directory: '/data/lu/ascendc-optim/kernel_workspace/KernelBench910B/level2/MatmulMishMishCustom_1/performance/performance.json'"
+      "exclusion_reason": "子版本 workspace 不是 PERFORMANCE_DONE"
     },
     {
       "ops": "MatmulMishMishCustom_1",

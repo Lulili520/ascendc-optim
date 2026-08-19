@@ -6,6 +6,7 @@ Action 是给实施 Agent 的中粒度修改计划，不是性能解释、伪代
 
 - 每个 action 只对应一个真实 symbol 和一个固定 operation。
 - `edits` 使用 1–4 条 `<operation_slot>/<源码对象>：<当前实现>改为<目标结构；必要参数>`，每条表达可审计代码变换。`operation-slots.json` 用于检查语义覆盖，不强制拆分数量或顺序；一条 edit 可合并多个相关语义。
+- 单条 edit 最长 640 字符，仅允许容量、确定参数和共享成本规则占用额外长度；不得填充解释性文字。
 - `constraints` 使用 1–4 条不变式，只保留 dtype、索引覆盖、tail/对齐、容量、同步、公开 ABI 或数学语义。
 - 完成策略所需的最小 symbol 集合为 1–4 个 actions；同一 `target + operation` 必须合并。
 
@@ -23,17 +24,23 @@ Edit 必须以变换动作为主，例如“将连续 ceil 切分改为商余数
 
 合格示例：`BLOCK_DIM：从固定 24 改为 min(available_aiv_cores, tiles)`。不要猜测源码中不存在的对象。
 
-涉及 `resize_work_unit` 时，edits 必须给出当前 work unit、峰值活跃 Buffer 的字节公式、候选选择规则和任务数联动；未经成功子版本验证，不得把经验候选写成确定最优值。固定机器语法为：`fixed_bytes=N,bytes_per_element=N,usable_ub_ratio=R`、`peak_bytes=fixed_bytes+bytes_per_element*tile`、`max_tile=floor((usable_ub_bytes-fixed_bytes)/bytes_per_element)`、`candidate_rule=...`、`total_tasks=...`、`alignment=...`、`valid_len=...`；校验器使用正式硬件 UB 重算预算。
+涉及 `resize_work_unit` 时，按算子模式在保持足够核心任务的前提下选择容量允许的最大合法有效 tile，再用剩余片上空间确定 chunk；给出最终活跃 Buffer、对齐、任务覆盖和 blockDim，不生成候选参数或试参列表。
 
 涉及 `coarsen_task_partition` 时，edits 必须给出当前 block/task 粒度、物理核或可靠硬件来源、持久 task 循环及覆盖关系；不能只把 blockDim 改成核数。
 
-涉及 `overlap_pipeline_stages` 时，edits 必须覆盖 prologue、steady、epilogue 与槽所有权；只修改 `InitBuffer` 数量不合格。
+涉及 `overlap_pipeline_stages` 或 `restructure_pipeline_slots` 时，必须证明至少两个可交错 chunk、独立搬运/计算、容量不迫使主 tile 缩小，并覆盖 prologue、steady、epilogue 与槽所有权；单槽存在或只修改 `InitBuffer` 数量不合格。
 
 涉及 `vectorize_scalar_work` 时，必须明确被替换的 Scalar 循环或 `GetValue/SetValue` 对象、UB tile、Vector 转换/计算序列和 tail；不确定 SDK API 时描述变换并在生成门禁确认，不猜签名。
 
-`pattern_and_tiling` 直接根据当前源码写明 `pattern/branch`，并给出 `fixed_bytes=N,bytes_per_element=N,usable_ub_ratio=R`、`peak_bytes=fixed_bytes+bytes_per_element*chunk`、`chunk_rule=max_chunk=floor((usable_ub_bytes-fixed_bytes)/bytes_per_element)`、`alignment=` 与 `tiling_change=true/false`。校验器使用正式硬件 UB 重算；`tiling_change=true` 时必须包含 Host tiling target。`dtype_tail_abi` 必须给出 `valid_len=`、`input_dtype=`、`compute_dtype=`、`output_dtype=` 和可确认的输出 ABI 路径。
+`pattern_and_tiling` 写清当前 pattern、最终 chunk/tile、是否修改 Host tiling 以及容量边界即可。`dtype_tail_abi` 写清有效范围、计算 dtype、输出 dtype 和 ABI 保持方式；不要求固定字段串或固定措辞。
 
 全部 strategies 是一套共享最终设计：相同 target 内的相同源码对象不得出现不同 edit；`pattern/branch/alignment/input_dtype/compute_dtype/output_dtype` 在不同 strategies 中不得冲突。发生冲突时统一重写 actions，不得依赖实施顺序覆盖前一方案。
+
+已有 LocalTensor Compare/Select/Reduce 的循环属于 Vector 路径，不得在 action 中重新描述为 Scalar。优先扩大连续保留轴 tile、减少 task 和重复 Vector API；只有算子模式或当前 SDK 明确要求时才引入 Transpose/Gather。
+
+共享设计还必须满足：全部活跃 Buffer 合计不超容量；`selected_tile/selected_chunk`、`total_tasks` 与 `blockDim` 来自同一任务分解；双缓冲计入槽数；搬运的 block/stride 能表达真实地址；Queue 生产消费配对并明确 prologue/steady/epilogue。不得为每个 cause 独立选择这些参数。
+
+所有搬运 action 还必须声明阶段边界：GM→片上→计算或计算→片上→GM 默认用相应 TQue 表达所有权；若保留 TBuf，edits 必须列出当前架构的正向可见性 event 与复用前反向 event。`PipeBarrier<PIPE_MTE2/PIPE_V/PIPE_MTE3>` 不得写成跨流水同步方案。
 
 涉及 `coalesce_global_transfer` 时，必须给出 `block_count=`、`block_len=`、`src_stride=`、`dst_stride=`、`alignment=` 和 `valid_len=`；只有连续或可由合法二维搬运参数表达的地址才能合并。
 

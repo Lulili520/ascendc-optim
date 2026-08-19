@@ -24,6 +24,8 @@ MANIFEST = PROJECT_ROOT / "manifest.json"
 REFERENCES = WORKSPACE / "kernel/pytorch-references/KernelBench"
 ACTIVATE = Path("/data/lu/activate_evokernel.sh")
 ATOL = RTOL = 1e-2
+REFERENCE_CACHE = Path("/data/lu/ascendc-tmp/kernel_precision_reference_cache")
+REFERENCE_SEED = 1234
 
 
 def quote(value: Path | str) -> str:
@@ -416,6 +418,26 @@ def to_npu(value, torch):
     return value
 
 
+def to_cpu(value, torch):
+    if isinstance(value, torch.Tensor):
+        return value.detach().cpu().contiguous()
+    if isinstance(value, tuple):
+        return tuple(to_cpu(x, torch) for x in value)
+    if isinstance(value, list):
+        return [to_cpu(x, torch) for x in value]
+    return value
+
+
+def reference_cache_path(name: str, reference_path: Path, init_args: list, torch) -> Path:
+    digest = hashlib.sha256()
+    digest.update(reference_path.read_bytes())
+    digest.update(repr(init_args).encode())
+    digest.update(str(torch.__version__).encode())
+    digest.update(str(REFERENCE_SEED).encode())
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
+    return REFERENCE_CACHE / f"{safe_name}.{digest.hexdigest()[:20]}.pt"
+
+
 def prepare_call(name: str, item: dict, project: Path, torch):
     reference_path = REFERENCES / item["reference_candidates"][0]
     if not reference_path.is_file():
@@ -423,7 +445,39 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     reference = load_python_file(reference_path)
     init_args = reference.get_init_inputs() if hasattr(reference, "get_init_inputs") else []
     model = reference.Model(*init_args).eval().npu()
-    inputs = [to_npu(value, torch) for value in reference.get_inputs()]
+    cache_path = reference_cache_path(name, reference_path, init_args, torch)
+    inputs = None
+    expected = None
+    if cache_path.is_file():
+        print(f"REFERENCE_CACHE_HIT={cache_path}", flush=True)
+        cached = torch.load(cache_path, map_location="cpu", weights_only=False)
+        inputs_cpu = cached["inputs"]
+        expected_cpu = cached["expected"]
+    else:
+        print("INPUT_START", flush=True)
+        inputs_cpu = reference.get_inputs()
+        print("INPUT_DONE", flush=True)
+        inputs_for_reference = [to_npu(value, torch) for value in inputs_cpu]
+        print("REFERENCE_START", flush=True)
+        with torch.inference_mode():
+            expected = model(*inputs_for_reference)
+        torch.npu.synchronize()
+        print("REFERENCE_DONE", flush=True)
+        if not isinstance(expected, torch.Tensor):
+            raise RuntimeError("当前精度脚本要求 reference 返回单个 Tensor")
+        expected_cpu = expected.detach().cpu().contiguous()
+        inputs_cpu = to_cpu(inputs_cpu, torch)
+        REFERENCE_CACHE.mkdir(parents=True, exist_ok=True)
+        temporary = cache_path.with_suffix(".pt.tmp")
+        torch.save({"inputs": inputs_cpu, "expected": expected_cpu}, temporary)
+        temporary.replace(cache_path)
+        print(f"REFERENCE_CACHE_SAVED={cache_path}", flush=True)
+        inputs = inputs_for_reference
+    if inputs is None:
+        inputs = [to_npu(value, torch) for value in inputs_cpu]
+    if expected is None:
+        expected = expected_cpu.npu().contiguous()
+    del inputs_cpu, expected_cpu
 
     forward_names = list(inspect.signature(model.forward).parameters)
     values = {norm(key): value for key, value in zip(forward_names, inputs)}
@@ -500,7 +554,7 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     sys.path.insert(0, str(project / "CppExtension"))
     extension = importlib.import_module(item["extension_module"])
     custom = getattr(extension, function)
-    return model, inputs, custom, custom_args, reference_path
+    return inputs, expected, custom, custom_args, reference_path
 
 
 def precision(name: str, project_dir: str | None = None) -> None:
@@ -508,19 +562,21 @@ def precision(name: str, project_dir: str | None = None) -> None:
     import torch_npu  # noqa: F401 - 注册 torch.npu 后端
 
     item, project = resolve_operator(name, project_dir)
-    torch.manual_seed(1234)
-    model, inputs, custom, custom_args, reference_path = prepare_call(
+    torch.manual_seed(REFERENCE_SEED)
+    inputs, expected, custom, custom_args, reference_path = prepare_call(
         name, item, project, torch
     )
+    print("CUSTOM_START", flush=True)
     with torch.inference_mode():
-        expected = model(*inputs)
         actual = custom(*custom_args)
     torch.npu.synchronize()
+    print("CUSTOM_DONE", flush=True)
     if not isinstance(expected, torch.Tensor) or not isinstance(actual, torch.Tensor):
         raise RuntimeError("当前精度脚本要求 reference 和自定义算子均返回单个 Tensor")
     if actual.shape != expected.shape:
         raise RuntimeError(f"输出 shape 不一致：actual={actual.shape}, expected={expected.shape}")
 
+    print("COMPARE_START", flush=True)
     diff = (actual.float() - expected.float()).abs()
     print(f"operator={name}")
     print(f"reference={reference_path}")
@@ -530,6 +586,7 @@ def precision(name: str, project_dir: str | None = None) -> None:
     print(f"max_abs={max_abs:.8f}")
     print(f"mean_abs={mean_abs:.8f}")
     torch.testing.assert_close(actual, expected, atol=ATOL, rtol=RTOL)
+    print("COMPARE_DONE", flush=True)
     result = {
         "operator": name, "status": "PASS", "exit_code": 0,
         "reference": str(reference_path), "output_shape": list(actual.shape),

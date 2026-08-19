@@ -1,17 +1,19 @@
 # Implementation 失败诊断知识
 
-Implementation 使用本表反向加载同目录的 `action-api-knowledge.md` 和 `action-pattern-knowledge.md`。诊断只能修复现有 change 的落地，不得改写策略选择；初次实施后最多修复 3 次。
+Implementation 使用本表定位失败，再只加载阶段输入指定的通用契约、架构覆盖层相关节。诊断只能修复冻结 action 的落地，不得改写策略；初次实施后最多修复 3 次。
 
 | 失败现象 | 优先根因 | 必查知识 | 修复边界 |
 |---|---|---|---|
-| API参数或重载编译失败 | tensor类型、字段类型、架构签名 | GM搬运、当前 SDK核验 | 适配当前签名，不换策略 |
-| AICore禁止动态类型转换 | Scalar转换限制 | dtype、Cast与索引 | float累加器或 Vector Cast |
-| 输出随机/大面积错 | 缺同步、UB复用、未初始化 | TBuf/TQue与流水线 | Queue/event/barrier及生命周期 |
-| 仅尾块错 | valid/aligned混淆、padding/mask | 对齐、尾块 | 中性padding，仅写有效范围 |
-| 错误集中在固定tile lane | Vector count、mask布局、写回粒度 | Compare对齐、Writeback | 对齐计算并批量搬出 |
-| int64出现两个32位值打包 | 逐元素转换/store路径 | dtype、输出ABI、Writeback | UB组装ABI后MTE3写回 |
-| 结果全0或未写 | 输出Queue位置、MTE3依赖 | Queue与流水线 | VECOUT EnQue/DeQue和CopyOut |
-| 编译通过但设备异常 | 越界、UB地址不对齐、容量 | 搬运、容量、尾块 | 先做CopyIn→CopyOut最小验证 |
-| 精度正确但明显变慢 | blockDim、Queue开销、tile过小 | Parallel、Batch transfer | 只能在原change范围调参数 |
+| `unsigned long/size_t` 窄化、结构体初始化失败 | `sizeof`/count/stride 表达式与字段类型不同 | `implementation-core:transfer,sdk-check` | 证明范围后显式构造目标类型 |
+| API 参数、重载或符号作用域编译失败 | tensor/dtype、字段类型、命名空间、架构签名 | `implementation-core:sdk-check` 与当前 profile | 适配 header 真实声明，不换策略 |
+| AICore 禁止整数/浮点转换 | Scalar 转换限制或 Vector API dtype 不匹配 | `implementation-core:vector,sdk-check` | 使用已核验 Vector Cast 链或可证明精度的累加表示 |
+| `use of undeclared identifier` | 结构修改后声明/获取/使用不闭环 | `implementation-core:sdk-check` | 恢复原 action 内的对象闭环，删除旧标识符引用 |
+| 每次错误数量变化、输出随机/局部错 | 跨流水可见性、片上复用、未初始化 | `implementation-core:lifetime` 与当前 profile | 修复生产消费与复用边界，不用 PipeBarrier 替代跨流水 event |
+| 仅尾块错 | valid/aligned 混淆、padding/mask | `implementation-core:transfer,vector` | 中性 padding，仅写有效范围 |
+| 错误集中在固定 tile lane | Vector count、mask 布局、写回粒度 | `implementation-core:vector,abi` | 对齐计算空间并批量搬出 |
+| int64 出现两个 32 位值打包 | 逐元素转换/store 路径 | `implementation-core:vector,abi` | 片上组装目标 ABI 后批量写回 |
+| 结果全 0 或未写 | 输出 Buffer 位置、写回依赖 | `implementation-core:lifetime,abi` | 修复生产消费关系和 CopyOut |
+| MTE/AIV/AIC 设备异常、地址未对齐或 Vector 异常 | GM/片上越界、参数不合法、容量 | `implementation-core:transfer,lifetime` 与当前 profile | 一次复核本轮全部搬运点；同 PC 重复则否定旧假设 |
+| 精度正确但明显变慢 | blockDim、Queue 槽数、tile 过小 | `implementation-core:tiling,lifetime` | 比较单槽大 tile 与容量可行的交错，不预设 TBuf/TQue 更快 |
 
-每次修复：记录失败阶段和直接证据，只形成一个主要根因假设，做最小修改，然后从编译门禁重新验证。源码变化后旧精度和性能失效。发现 action 存在可前移的通用规则时，回灌知识文件和后续 Strategy 校验门禁；不得回写已经冻结的父版本 `strategy.json`。
+每次修复：记录失败阶段和直接证据，只形成一个主要根因假设，做最小修改，然后从编译门禁重新验证。MTE 假设的证据集必须覆盖本轮所有搬运点，但仍只修复一个共同根因。源码变化后旧精度和性能失效。发现 action 存在可前移的通用规则时，回灌知识文件和后续 Strategy 校验门禁；不得回写已经冻结的父版本 `strategy.json`。

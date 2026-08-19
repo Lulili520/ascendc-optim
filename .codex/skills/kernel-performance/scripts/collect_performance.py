@@ -47,10 +47,19 @@ HARDWARE_FIELDS = (
     "l2_bytes", "gm_peak_bandwidth_gbps_per_core",
 )
 NUMERIC_HARDWARE_FIELDS = set(HARDWARE_FIELDS) - {"soc"}
+MIN_IMPROVEMENT_PERCENT = 1.0
 
 
 def quote(value: Path | str) -> str:
     return shlex.quote(str(value))
+
+
+def load_json(path: Path) -> dict | None:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None
+    return value if isinstance(value, dict) else None
 
 
 def source_fingerprint(project: Path) -> str:
@@ -164,6 +173,31 @@ def update_workspace(project: Path, status: str, **fields: object) -> None:
     data.update({"status": status, "updated_at": datetime.now(timezone.utc).isoformat()})
     data.update(fields)
     path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def best_prior_latency(project: Path) -> tuple[int, float] | None:
+    match = re.fullmatch(r"(.+)_(\d+)", project.name)
+    if match is None:
+        return None
+    operator, version_text = match.groups()
+    candidates = []
+    for candidate in range(int(version_text)):
+        prior = project.parent / f"{operator}_{candidate}"
+        workspace = load_json(prior / "workspace.json") if prior.is_dir() else None
+        report = load_json(prior / "performance/performance.json") if prior.is_dir() else None
+        latency = (report or {}).get("kernel_latency_us")
+        complete = {
+            "task", "pipeline", "arithmetic", "memory", "memory_l0", "memory_ub",
+            "l2_cache", "resource_conflict", "per_core", "hardware",
+        } <= set(report or {})
+        if (
+            isinstance(workspace, dict) and workspace.get("status") == "PERFORMANCE_DONE"
+            and workspace.get("source_fingerprint") == source_fingerprint(prior)
+            and complete
+            and isinstance(latency, (int, float)) and latency > 0
+        ):
+            candidates.append((candidate, float(latency)))
+    return min(candidates, key=lambda item: item[1]) if candidates else None
 
 
 def resolve_operator(name: str, project_dir: str | None = None) -> tuple[dict, Path]:
@@ -560,6 +594,47 @@ def collect(
             if not rows:
                 raise RuntimeError(f"{metric} 未找到 {name} 的 AI Core 记录")
             metric_rows[metric] = rows[-1]
+            if metric == "PipeUtilization":
+                latency = as_float(metric_rows[metric].get("Task Duration(us)"))
+                if latency <= 0:
+                    raise RuntimeError("PipeUtilization 中缺少有效 Task Duration(us)")
+                best = best_prior_latency(project)
+                if best is not None:
+                    best_version, best_latency = best
+                    improvement = (best_latency - latency) / best_latency * 100.0
+                    if improvement <= MIN_IMPROVEMENT_PERCENT:
+                        screening = {
+                            "operator": name,
+                            "status": "NO_IMPROVEMENT",
+                            "kernel_latency_us": latency,
+                            "best_version": best_version,
+                            "best_latency_us": best_latency,
+                            "improvement_percent": improvement,
+                            "threshold_percent": MIN_IMPROVEMENT_PERCENT,
+                            "source_fingerprint": fingerprint,
+                            "completed_at": datetime.now(timezone.utc).isoformat(),
+                        }
+                        (report_dir / "screening.json").write_text(
+                            json.dumps(screening, ensure_ascii=False, indent=2) + "\n",
+                            encoding="utf-8",
+                        )
+                        update_workspace(
+                            project, "PERFORMANCE_SCREENED_NO_IMPROVEMENT",
+                            source_fingerprint=fingerprint,
+                            performance={
+                                "status": "SCREENED_NO_IMPROVEMENT",
+                                "kernel_latency_us": latency,
+                                "best_version": best_version,
+                                "improvement_percent": improvement,
+                                "result": "performance/screening.json",
+                            },
+                        )
+                        print(
+                            f"performance_early_stop=true latency_us={latency:.6f} "
+                            f"best_version={best_version} improvement_percent={improvement:.6f}",
+                            flush=True,
+                        )
+                        return report_dir
 
         print("[3/4] 采集 sample-based 逐核 cycle", flush=True)
         sample = temp_root / "PROF_Sample"

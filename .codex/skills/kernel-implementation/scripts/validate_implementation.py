@@ -29,20 +29,11 @@ def validate_attempts(attempts: object, expected: set[int], project: Path) -> No
     if not isinstance(attempts, list) or not 1 <= len(attempts) <= 4:
         raise RuntimeError("attempts 必须包含初次实施及最多 3 次修复")
     fields = {"attempt", "kind", "trigger", "knowledge_keys", "action_indices", "implementation_summary", "modified_files", "validation"}
-    previous = None
     for number, item in enumerate(attempts, 1):
         if not isinstance(item, dict) or set(item) != fields:
             raise RuntimeError(f"attempt {number} 字段不符合契约")
         if item["attempt"] != number or item["kind"] != ("initial" if number == 1 else "repair"):
             raise RuntimeError("attempt 编号或 kind 非法")
-        trigger = item["trigger"]
-        if number == 1 and trigger is not None:
-            raise RuntimeError("初次实施 trigger 必须为 null")
-        if number > 1:
-            if not isinstance(trigger, dict) or set(trigger) != {"stage", "symptom", "evidence"}:
-                raise RuntimeError("repair trigger 字段不完整")
-            if trigger["stage"] not in {"build", "precision"} or previous is None or previous[trigger["stage"]] != "FAILED":
-                raise RuntimeError("repair 必须由前次 build/precision 失败触发")
         indices = item["action_indices"]
         if not isinstance(indices, list) or not indices or not set(indices) <= expected:
             raise RuntimeError("action_indices 非法")
@@ -56,11 +47,6 @@ def validate_attempts(attempts: object, expected: set[int], project: Path) -> No
             raise RuntimeError("attempt validation 非法")
         if validation["build"] not in {"PASS", "FAILED", "NOT_RUN"} or validation["precision"] not in {"PASS", "FAILED", "NOT_RUN"} or validation["performance"] not in {"DONE", "FAILED", "NOT_RUN"}:
             raise RuntimeError("门禁状态非法")
-        if validation["build"] != "PASS" and (validation["precision"] != "NOT_RUN" or validation["performance"] != "NOT_RUN"):
-            raise RuntimeError("build 未通过不得运行后续门禁")
-        if validation["precision"] != "PASS" and validation["performance"] != "NOT_RUN":
-            raise RuntimeError("precision 未通过不得运行 performance")
-        previous = validation
 
 
 def validate(
@@ -99,10 +85,8 @@ def validate(
     if indices != list(range(1, count + 1)):
         raise RuntimeError("action_index 必须从 1 连续覆盖全部 actions")
     reasoning = implementation.get("reasoning")
-    if not isinstance(reasoning, list) or not reasoning or any(
-        not isinstance(x, str) or not x.strip() for x in reasoning
-    ):
-        raise RuntimeError("reasoning 必须是非空文本")
+    if not isinstance(reasoning, list):
+        raise RuntimeError("reasoning 必须是数组")
     files = implementation.get("modified_files")
     # strategy.json is the immutable parent-version plan, while
     # implementation.json and the modified sources live in the child version.

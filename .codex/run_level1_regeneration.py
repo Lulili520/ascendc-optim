@@ -27,8 +27,11 @@ ASCENDC_TMPDIR = Path("/data/lu/ascendc-tmp")
 LOCK = ROOT / "kernel_workspace/KernelBench910B/level1_regeneration.lock"
 MAX_AGENT_ATTEMPTS = 2
 MAX_REPAIRS = 3
+MAX_OPTIMIZATION_ROUNDS = 4
+MIN_IMPROVEMENT_PERCENT = 1.0
 TERMINAL_STATES = {
-    "completed_two_rounds", "stopped_no_issue", "build_failed",
+    "completed_max_rounds_with_issues", "stopped_no_issue", "build_failed",
+    "stopped_no_improvement", "stopped_by_user",
     "precision_failed", "performance_failed", "strategy_blocked",
     "implementation_blocked", "prepare_failed", "agent_failed", "incomplete",
 }
@@ -64,7 +67,9 @@ def source_fingerprint(project: Path) -> str | None:
 
 
 def precision_gate(project: Path, workspace: dict | None) -> tuple[bool, str]:
-    if not workspace or workspace.get("status") not in {"PRECISION_PASS", "PERFORMANCE_DONE"}:
+    if not workspace or workspace.get("status") not in {
+        "PRECISION_PASS", "PERFORMANCE_DONE", "PERFORMANCE_SCREENED_NO_IMPROVEMENT",
+    }:
         return False, "workspace status has not passed precision"
     fingerprint = source_fingerprint(project)
     if not fingerprint or workspace.get("source_fingerprint") != fingerprint:
@@ -104,13 +109,85 @@ def performance_gate(project: Path, workspace: dict | None) -> tuple[bool, str]:
     return True, "all durable gates passed"
 
 
+def performance_screening(project: Path, workspace: dict | None) -> dict | None:
+    if not workspace or workspace.get("status") != "PERFORMANCE_SCREENED_NO_IMPROVEMENT":
+        return None
+    screening = load_json(project / "performance/screening.json")
+    fingerprint = source_fingerprint(project)
+    if (
+        not screening or screening.get("status") != "NO_IMPROVEMENT"
+        or not fingerprint or screening.get("source_fingerprint") != fingerprint
+    ):
+        return None
+    latency = screening.get("kernel_latency_us")
+    improvement = screening.get("improvement_percent")
+    if not isinstance(latency, (int, float)) or latency <= 0:
+        return None
+    if not isinstance(improvement, (int, float)) or improvement > MIN_IMPROVEMENT_PERCENT:
+        return None
+    return screening
+
+
+def cleanup_reference_cache(operator: str) -> None:
+    cache = ASCENDC_TMPDIR / "kernel_precision_reference_cache"
+    if not cache.is_dir():
+        return
+    safe = re.sub(r"[^A-Za-z0-9_.-]", "_", operator)
+    for path in cache.glob(f"{safe}.*.pt*"):
+        try:
+            path.unlink()
+        except FileNotFoundError:
+            pass
+
+
+def kernel_latency(project: Path) -> float | None:
+    performance = load_json(project / "performance/performance.json") or {}
+    value = performance.get("kernel_latency_us")
+    return float(value) if isinstance(value, (int, float)) and math.isfinite(value) and value > 0 else None
+
+
+def improvement_percent(parent: Path, child: Path) -> float | None:
+    before, after = kernel_latency(parent), kernel_latency(child)
+    if before is None or after is None:
+        return None
+    return (before - after) / before * 100.0
+
+
+def best_prior_project(operator: str, version: int) -> tuple[int, Path] | None:
+    candidates = [
+        (candidate, path, kernel_latency(path))
+        for candidate, path in operator_projects(operator) if candidate < version
+    ]
+    valid = [(candidate, path, latency) for candidate, path, latency in candidates if latency is not None]
+    if not valid:
+        return None
+    candidate, path, _ = min(valid, key=lambda item: item[2])
+    return candidate, path
+
+
+def non_improving_result(operator: str) -> tuple[int, int, float] | None:
+    """Find the earliest completed version that failed to beat prior best."""
+    for version, project in operator_projects(operator):
+        if version <= 0 or kernel_latency(project) is None:
+            continue
+        best = best_prior_project(operator, version)
+        if best is None:
+            continue
+        best_version, parent = best
+        gain = improvement_percent(parent, project)
+        if gain is not None and gain <= MIN_IMPROVEMENT_PERCENT:
+            return version, best_version, gain
+    return None
+
+
 def bottleneck_gate(project: Path) -> tuple[bool, str]:
     report = load_json(project / "bottleneck/bottleneck.json")
     if not report or set(report) != {"reasoning", "issues"}:
         return False, "bottleneck report is missing or has stale top-level fields"
     if not isinstance(report["reasoning"], list) or not isinstance(report["issues"], list):
         return False, "bottleneck reasoning/issues are not lists"
-    if len(report["reasoning"]) != len(report["issues"]):
+    expected_reasoning = len(report["issues"]) if report["issues"] else 1
+    if len(report["reasoning"]) != expected_reasoning:
         return False, "bottleneck reasoning/issues length mismatch"
     validation = subprocess.run(
         [sys.executable, str(ROOT / ".codex/skills/kernel-bottleneck/scripts/validate_report.py"),
@@ -212,6 +289,8 @@ def next_durable_stage(operator: str) -> str:
         return "prepare _0"
     for version, project in projects:
         workspace = load_json(project / "workspace.json") or {}
+        if performance_screening(project, workspace):
+            return f"stop at _{version}: screened no improvement"
         if not precision_gate(project, workspace)[0]:
             return f"validate or repair _{version} precision"
         if not performance_gate(project, workspace)[0]:
@@ -221,8 +300,8 @@ def next_durable_stage(operator: str) -> str:
         bottleneck = load_json(project / "bottleneck/bottleneck.json") or {}
         if not bottleneck.get("issues"):
             return f"stop at _{version}: issues=[]"
-        if version >= 2:
-            return "stop at _2: version limit reached"
+        if version >= MAX_OPTIMIZATION_ROUNDS:
+            return f"stop at _{MAX_OPTIMIZATION_ROUNDS}: version limit reached"
         strategy = load_json(project / "strategy/strategy.json")
         if not strategy:
             return f"derive _{version} strategy"
@@ -237,6 +316,17 @@ def repair_count(project: Path) -> int:
     implementation = load_json(project / "strategy/implementation.json") or {}
     return sum(1 for attempt in implementation.get("attempts", [])
                if isinstance(attempt, dict) and attempt.get("kind") == "repair")
+
+
+def completed_chain(operator: str, final_version: int) -> bool:
+    """Require every parent->child transition through final_version to be valid."""
+    return all(
+        completed_round_gate(
+            LEVEL / f"{operator}_{version - 1}",
+            LEVEL / f"{operator}_{version}",
+        )[0]
+        for version in range(1, final_version + 1)
+    )
 
 
 def failure_summary(project: Path) -> dict:
@@ -261,6 +351,130 @@ def failure_summary(project: Path) -> dict:
     return {key: value for key, value in summary.items() if value not in (None, [], "")}
 
 
+def _strategy_operations(strategy: dict | None) -> set[str]:
+    return {
+        str(action.get("operation", ""))
+        for item in (strategy or {}).get("strategies", [])
+        for action in item.get("actions", []) if isinstance(action, dict)
+    } - {""}
+
+
+def _knowledge_sections(operations: set[str]) -> list[str]:
+    sections = {"sdk-check"}
+    for operation in operations:
+        if any(token in operation for token in ("transfer", "gather", "scatter", "writeback")):
+            sections.add("transfer")
+            sections.add("lifetime")
+        if any(token in operation for token in ("vector", "reduce", "cast", "cube")):
+            sections.add("vector")
+        if any(token in operation for token in (
+            "buffer", "pipeline", "sync", "resident", "retain", "reuse", "on_chip", "privatize"
+        )):
+            sections.add("lifetime")
+        if any(token in operation for token in ("tiling", "parallel", "partition", "work_unit", "cube")):
+            sections.add("tiling")
+        if any(token in operation for token in ("writeback", "cast", "fixpipe", "scatter")):
+            sections.add("abi")
+    return sorted(sections)
+
+
+def implementation_knowledge(
+    strategy: dict | None, device_id: int = 0, include_device_error: bool = False
+) -> dict:
+    """Select compact knowledge from frozen actions and exact device identity."""
+    operations = _strategy_operations(strategy)
+    sections = _knowledge_sections(operations)
+    core = ROOT / ".codex/kernel-knowledge/implementation-core.md"
+    references = [{"path": str(core), "sections": sections}]
+
+    device_path = LEVEL.parent / "hardware" / f"device_{device_id}.json"
+    device = load_json(device_path) or {}
+    soc = (device.get("identity") or {}).get("soc")
+    index = load_json(ROOT / ".codex/kernel-knowledge/architecture-index.json") or {}
+    architecture = index.get(soc) if isinstance(soc, str) else None
+    if isinstance(architecture, dict):
+        reference = ROOT / ".codex/kernel-knowledge/architecture-knowledge.md"
+        arch_sections = [name for name in sections if name in {"transfer", "vector", "lifetime"}]
+        if include_device_error:
+            arch_sections.append("device-error")
+        if reference.is_file() and arch_sections:
+            references.append({
+                "path": str(reference),
+                "profile": architecture.get("profile"),
+                "sections": arch_sections,
+            })
+
+    return {
+        "device_soc": soc,
+        "architecture": architecture.get("profile") if isinstance(architecture, dict) else None,
+        "references": references,
+    }
+
+
+def initial_implementation(strategy: dict) -> dict:
+    strategies = strategy.get("strategies") or []
+    actions = [action for item in strategies for action in item.get("actions", [])]
+    indices = list(range(1, len(actions) + 1))
+    return {
+        "strategy_keys": [item["strategy_key"] for item in strategies],
+        "reasoning": ["由 implementation Agent 填写实际源码落地摘要。"],
+        "actions": [
+            {"action_index": index, "implementation_summary": "由 implementation Agent 填写。"}
+            for index in indices
+        ],
+        "modified_files": sorted({action["target"].split("::", 1)[0] for action in actions}),
+        "attempts": [{
+            "attempt": 1,
+            "kind": "initial",
+            "trigger": None,
+            "knowledge_keys": [],
+            "action_indices": indices,
+            "implementation_summary": "由 implementation Agent 填写。",
+            "modified_files": sorted({action["target"].split("::", 1)[0] for action in actions}),
+            "validation": {"build": "NOT_RUN", "precision": "NOT_RUN", "performance": "NOT_RUN"},
+        }],
+    }
+
+
+def prepare_child(parent: Path, child: Path, operator: str) -> None:
+    """Create a clean PREPARED child; content Agents never copy versions."""
+    if child.exists():
+        raise RuntimeError(f"child already exists: {child}")
+    strategy = load_json(parent / "strategy/strategy.json")
+    parent_workspace = load_json(parent / "workspace.json") or {}
+    if not strategy:
+        raise RuntimeError("parent strategy is missing")
+    shutil.copytree(
+        parent, child, symlinks=True,
+        ignore=shutil.ignore_patterns(
+            "precision", "performance", "bottleneck", "strategy", "workspace.json",
+            "build", "build_out", "CMakeFiles", "*.log",
+        ),
+    )
+    strategy_dir = child / "strategy"
+    strategy_dir.mkdir()
+    shutil.copy2(parent / "strategy/strategy.json", strategy_dir / "strategy.json")
+    (strategy_dir / "implementation.json").write_text(
+        json.dumps(initial_implementation(strategy), ensure_ascii=False, indent=2) + "\n"
+    )
+    version = int(child.name.rsplit("_", 1)[1])
+    workspace = {
+        "operator": operator,
+        "version": version,
+        "source_project": parent_workspace.get("source_project"),
+        "parent_version": int(parent.name.rsplit("_", 1)[1]),
+        "vendor": parent_workspace.get("vendor"),
+        "status": "PREPARED",
+        "source_fingerprint": source_fingerprint(child),
+        "precision": None,
+        "performance": None,
+        "bottleneck": None,
+        "strategy": {"status": "IMPLEMENTING", "result": "strategy/strategy.json"},
+        "updated_at": datetime.now(timezone.utc).isoformat(),
+    }
+    (child / "workspace.json").write_text(json.dumps(workspace, ensure_ascii=False, indent=2) + "\n")
+
+
 def durable_action(operator: str) -> dict:
     """Choose exactly one state-changing action from durable artifacts."""
     projects = operator_projects(operator)
@@ -268,8 +482,26 @@ def durable_action(operator: str) -> dict:
         return {"kind": "terminal", "state": "prepare_failed", "reason": "missing _0 workspace"}
     version, project = projects[-1]
     workspace = load_json(project / "workspace.json") or {}
+    screening = performance_screening(project, workspace)
+    if screening is not None:
+        return {
+            "kind": "terminal", "state": "stopped_no_improvement",
+            "reason": (
+                f"_{version} vs_best=_{screening.get('best_version')} "
+                f"improvement={float(screening['improvement_percent']):.4f}%<=1%; "
+                f"best=_{screening.get('best_version')}"
+            ),
+        }
+    rejected = non_improving_result(operator)
+    if rejected is not None:
+        rejected_version, best_version, gain = rejected
+        return {"kind": "terminal", "state": "stopped_no_improvement",
+                "reason": f"_{rejected_version} vs_best=_{best_version} improvement={gain:.4f}%<=1%; best=_{best_version}"}
     if version > 0:
         parent = LEVEL / f"{operator}_{version - 1}"
+        if not strategy_gate(parent)[0]:
+            return {"kind": "terminal", "state": "incomplete",
+                    "reason": f"_{version - 1} strategy uses stale contract; reinitialize queue"}
         blocking = load_json(project / "strategy/implementation_blocking.json")
         if blocking and blocking.get("reason"):
             return {"kind": "terminal", "state": "implementation_blocked",
@@ -307,13 +539,12 @@ def durable_action(operator: str) -> dict:
     if bottleneck.get("issues") == []:
         return {"kind": "terminal", "state": "stopped_no_issue",
                 "reason": f"_{version}=PERFORMANCE_DONE,issues=[]"}
-    if version >= 2:
-        zero = LEVEL / f"{operator}_0"
-        one = LEVEL / f"{operator}_1"
-        if one.is_dir() and completed_round_gate(zero, one)[0] and completed_round_gate(one, project)[0]:
-            return {"kind": "terminal", "state": "completed_two_rounds",
-                    "reason": "_2=PERFORMANCE_DONE,bottleneck_reanalyzed"}
-        return {"kind": "terminal", "state": "incomplete", "reason": "_2 round validation failed"}
+    if version >= MAX_OPTIMIZATION_ROUNDS:
+        if completed_chain(operator, version):
+            return {"kind": "terminal", "state": "completed_max_rounds_with_issues",
+                    "reason": f"_{version}=PERFORMANCE_DONE,residual_issues={len(bottleneck.get('issues', []))}"}
+        return {"kind": "terminal", "state": "incomplete",
+                "reason": f"_{version} round-chain validation failed"}
     blocking = load_json(project / "strategy/blocking.json")
     if blocking and blocking.get("reason"):
         return {"kind": "terminal", "state": "strategy_blocked",
@@ -333,15 +564,24 @@ def classify_result(operator: str, returncode: int) -> tuple[str, str]:
     """Classify by durable workspace gates, never by agent exit code alone."""
     projects = operator_projects(operator)
     reports = [(version, project, load_json(project / "workspace.json")) for version, project in projects]
-    version_two = next(((project, report) for version, project, report in reports if version == 2), None)
-    if version_two is not None:
-        project, report = version_two
-        version_one = next((path for version, path in projects if version == 1), None)
-        version_zero = next((path for version, path in projects if version == 0), None)
-        if (version_zero is not None and version_one is not None
-                and completed_round_gate(version_zero, version_one)[0]
-                and completed_round_gate(version_one, project)[0]):
-            return "completed_two_rounds", "_2=PERFORMANCE_DONE,bottleneck_reanalyzed"
+    for version, project, workspace in reversed(reports):
+        if version <= 0 or not performance_gate(project, workspace)[0]:
+            continue
+        best = best_prior_project(operator, version)
+        best_version, parent = best if best is not None else (version - 1, LEVEL / f"{operator}_{version - 1}")
+        gain = improvement_percent(parent, project)
+        if gain is not None and gain <= MIN_IMPROVEMENT_PERCENT:
+            return "stopped_no_improvement", f"_{version} vs_best=_{best_version} improvement={gain:.4f}%<=1%; best=_{best_version}"
+    final = next(((project, report) for version, project, report in reports
+                  if version == MAX_OPTIMIZATION_ROUNDS), None)
+    if final is not None:
+        project, report = final
+        if completed_chain(operator, MAX_OPTIMIZATION_ROUNDS):
+            bottleneck = load_json(project / "bottleneck/bottleneck.json") or {}
+            if bottleneck.get("issues") == []:
+                return "stopped_no_issue", f"_{MAX_OPTIMIZATION_ROUNDS}=PERFORMANCE_DONE,issues=[]"
+            return ("completed_max_rounds_with_issues",
+                    f"_{MAX_OPTIMIZATION_ROUNDS}=PERFORMANCE_DONE,residual_issues={len(bottleneck.get('issues', []))}")
     for version, project, workspace in reversed(reports):
         if not performance_gate(project, workspace)[0]:
             continue
@@ -362,6 +602,14 @@ def classify_result(operator: str, returncode: int) -> tuple[str, str]:
     if latest:
         version, workspace = latest
         status = workspace.get("status")
+        project = LEVEL / f"{operator}_{version}"
+        screening = performance_screening(project, workspace)
+        if screening is not None:
+            return (
+                "stopped_no_improvement",
+                f"_{version} vs_best=_{screening.get('best_version')} "
+                f"improvement={float(screening['improvement_percent']):.4f}%<=1%",
+            )
         if status in {"BUILD_FAILED", "PRECISION_FAILED", "PERFORMANCE_FAILED"}:
             return status.lower(), f"_{version}={status}"
     if returncode != 0:
@@ -413,10 +661,12 @@ def initialize() -> None:
         })
     queue = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "controller_state_machine_ephemeral_stage_agents_max_two_rounds",
+        "mode": "controller_state_machine_one_thread_per_operator_max_four_rounds",
         "archive": str(archive),
         "max_agent_attempts_per_stage": MAX_AGENT_ATTEMPTS,
         "max_repairs_per_version": MAX_REPAIRS,
+        "max_optimization_rounds": MAX_OPTIMIZATION_ROUNDS,
+        "min_improvement_percent": MIN_IMPROVEMENT_PERCENT,
         "items": items,
     }
     save(queue)
@@ -447,10 +697,12 @@ def rebuild() -> None:
         })
     queue = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
-        "mode": "controller_state_machine_ephemeral_stage_agents_max_two_rounds",
+        "mode": "controller_state_machine_one_thread_per_operator_max_four_rounds",
         "preserve_existing_versions": True,
         "max_agent_attempts_per_stage": MAX_AGENT_ATTEMPTS,
         "max_repairs_per_version": MAX_REPAIRS,
+        "max_optimization_rounds": MAX_OPTIMIZATION_ROUNDS,
+        "min_improvement_percent": MIN_IMPROVEMENT_PERCENT,
         "items": items,
     }
     save(queue)
@@ -486,30 +738,61 @@ def reconcile() -> None:
     print("reconciled=" + json.dumps(counts, ensure_ascii=False, sort_keys=True))
 
 
+def stage_key(action: dict) -> str:
+    """Give each bounded repair its own retry budget."""
+    suffix = str(action["stage"])
+    if suffix == "repair":
+        suffix += str(action["repair"])
+    return f"v{action['version']}:{suffix}"
+
+
 def stage_input(operator: str, action: dict, attempt: int) -> Path:
-    """Persist the small hand-off contract for one ephemeral Agent."""
+    """Persist the small hand-off contract for one operator Agent turn."""
     project = action["project"]
     payload = {
         "operator": operator,
         "stage": action["stage"],
         "version": action["version"],
         "project": str(project),
-        "host_files": [str(path) for path in sorted((project / "op_host").rglob("*")) if path.is_file()],
-        "kernel_files": [str(path) for path in sorted((project / "op_kernel").rglob("*")) if path.is_file()],
     }
+    if action["stage"] == "planning":
+        payload.update({
+            "host_files": [str(path) for path in sorted((project / "op_host").rglob("*")) if path.is_file()],
+            "kernel_files": [str(path) for path in sorted((project / "op_kernel").rglob("*")) if path.is_file()],
+        })
+        facts = subprocess.run(
+            [sys.executable, str(ROOT / ".codex/skills/kernel-bottleneck/scripts/source_facts.py"),
+             "--project-dir", str(project)],
+            cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+        )
+        if facts.returncode != 0:
+            raise RuntimeError("source facts failed: " + facts.stdout.strip()[-500:])
+        payload["source_facts"] = json.loads(facts.stdout)
     if action["stage"] == "implementation":
+        strategy_data = load_json(project / "strategy/strategy.json")
+        child = action["child"]
         payload.update({
             "parent": str(project),
-            "child": str(action["child"]),
+            "child": str(child),
             "bottleneck": str(project / "bottleneck/bottleneck.json"),
             "strategy": str(project / "strategy/strategy.json"),
+            "implementation": str(child / "strategy/implementation.json"),
+            "host_files": [str(path) for path in sorted((child / "op_host").rglob("*")) if path.is_file()],
+            "kernel_files": [str(path) for path in sorted((child / "op_kernel").rglob("*")) if path.is_file()],
+            "implementation_knowledge": implementation_knowledge(strategy_data),
         })
     elif action["stage"] in {"repair", "implementation_fix"}:
+        strategy_data = load_json(action["parent"] / "strategy/strategy.json")
         payload.update({
             "parent": str(action["parent"]),
             "bottleneck": str(action["parent"] / "bottleneck/bottleneck.json"),
             "strategy": str(action["parent"] / "strategy/strategy.json"),
             "implementation": str(project / "strategy/implementation.json"),
+            "host_files": [str(path) for path in sorted((project / "op_host").rglob("*")) if path.is_file()],
+            "kernel_files": [str(path) for path in sorted((project / "op_kernel").rglob("*")) if path.is_file()],
+            "implementation_knowledge": implementation_knowledge(
+                strategy_data, include_device_error=action["stage"] == "repair"
+            ),
         })
         if action["stage"] == "repair":
             payload.update({
@@ -519,7 +802,10 @@ def stage_input(operator: str, action: dict, attempt: int) -> Path:
             })
     directory = RUNS / f"{operator}.stages"
     directory.mkdir(parents=True, exist_ok=True)
-    path = directory / f"v{action['version']}.{action['stage']}.attempt{attempt}.input.json"
+    label = str(action["stage"])
+    if label == "repair":
+        label += str(action["repair"])
+    path = directory / f"v{action['version']}.{label}.attempt{attempt}.input.json"
     path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n")
     return path
 
@@ -527,35 +813,64 @@ def stage_input(operator: str, action: dict, attempt: int) -> Path:
 def agent_prompt(input_path: Path, action: dict) -> str:
     stage = action["stage"]
     common = f"""只处理阶段输入 {input_path}。仓库为 {ROOT}，严格遵守 AGENTS.md。
-阶段输入是控制器生成的权威最小状态；只读取其中列出的当前源码与报告，不遍历其他算子、历史版本、完整性能 CSV 或构建日志。不要运行 precision、performance、msprof 或 reference；控制器负责全部门禁。不要读取 validator 源码。
+阶段输入是权威最小状态；不遍历其他算子、历史版本、完整 CSV/日志，不读取 validator 源码。precision、performance、msprof 和 reference 均由控制器执行。
 """
     if stage == "planning":
-        return common + """这是 planning 短上下文。依次使用 kernel-bottleneck 和 kernel-strategy：完整读取这两个 SKILL.md；源码只读取一次。先从当前 Host/Kernel 源码生成并校验 bottleneck/bottleneck.json；若 issues=[] 立即结束。否则按已确定 cause 生成并校验 strategy/strategy.json。禁止修改源码，禁止生成 coverage.json 或 source_model.json。完成文件落盘后立即结束。"""
+        return common + """依次使用 kernel-bottleneck、kernel-strategy，完整读取两个 SKILL.md 并按其引用按需加载知识。源码只读一次；source_facts 中的排除项必须遵守。按算子模式快速确定最多 3 个兼容 issues，再按最大合法 tile→搬运 chunk→计算→Buffer→必要同步生成 strategy；不建立成本账本、不搜索参数。校验两个 JSON，不修改源码或生成辅助分析文件。"""
     if stage == "implementation":
-        return common + """这是 implementation 短上下文。只使用 kernel-implementation，读取其 SKILL.md 和 actions 实际涉及的知识章节。创建阶段输入指定的 child，实施全部冻结 actions，只修改 child/op_host 与 child/op_kernel，写入并校验 implementation.json 和源码效果。禁止运行精度、性能或重新分析瓶颈；完成源码实施记录后立即结束。"""
+        return common + """只使用 kernel-implementation。child、冻结 strategy 和 implementation 骨架已创建，不得创建版本。仅读取 implementation_knowledge.references 指定章节；architecture=null 时不使用架构常数。实施全部 actions，填写骨架；validator 总计最多两次，中间只允许一次最小修正。"""
     if stage == "implementation_fix":
-        return common + """这是 implementation 产物修正短上下文。只使用 kernel-implementation；子版本已存在，不得创建或覆盖版本。运行 implementation validator，根据最后一条错误修正 implementation.json 或补全尚未实施的冻结 action，再运行源码效果校验。不得新增优化、运行精度或性能。校验通过后立即结束。"""
-    return common + """这是 repair 短上下文。只使用 kernel-implementation；根据阶段输入中的 bounded failure、当前源码 diff 和冻结 actions 做一次最小修复。不得改变或扩展 strategy，不得读取完整日志。更新 implementation.json，新增且仅新增本次 repair attempt，校验 implementation 与源码效果；禁止运行精度、性能或继续下一次修复。完成后立即结束。"""
+        return common + """只使用 kernel-implementation。子版本已存在；按 validator 错误修正记录或补全冻结 action，复验一次。不得新增优化或运行门禁。"""
+    return common + """只使用 kernel-implementation。依据 bounded failure 在冻结 actions 内做一次最小修复，并追加一个 repair attempt。设备异常读取当前架构的 device-error/transfer 节；未知架构查 headers，并复核本轮全部搬运点。校验后结束，不运行门禁。"""
+
+
+def thread_id_from_log(path: Path) -> str | None:
+    """Read the persisted Codex thread id from a JSONL run log."""
+    for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
+        try:
+            event = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if event.get("type") == "thread.started" and isinstance(event.get("thread_id"), str):
+            return event["thread_id"]
+    return None
+
+
+def agent_command(thread_id: str | None, final_message: Path, prompt: str) -> list[str]:
+    common = ["--json", "--dangerously-bypass-approvals-and-sandbox",
+              "-o", str(final_message)]
+    if thread_id:
+        return ["codex", "exec", "resume", *common, thread_id, prompt]
+    return ["codex", "exec", *common, "-C", str(ROOT), prompt]
 
 
 def run_agent_stage(item: dict, action: dict) -> int:
     stage_attempts = item.setdefault("stage_attempts", {})
-    key = f"v{action['version']}:{action['stage']}"
+    key = stage_key(action)
     attempt = stage_attempts.get(key, 0) + 1
     stage_attempts[key] = attempt
+    if action["stage"] == "implementation":
+        prepare_child(action["project"], action["child"], item["operator"])
     input_path = stage_input(item["operator"], action, attempt)
-    stem = f"{item['position']:03d}_{item['operator']}.v{action['version']}.{action['stage']}.attempt{attempt}"
+    label = str(action["stage"])
+    if label == "repair":
+        label += str(action["repair"])
+    stem = f"{item['position']:03d}_{item['operator']}.v{action['version']}.{label}.attempt{attempt}"
     run_log = RUNS / f"{stem}.jsonl"
     final_message = RUNS / f"{stem}.final.txt"
     with run_log.open("w") as output:
         child_env = os.environ.copy()
         child_env["ASCENDC_TMPDIR"] = str(ASCENDC_TMPDIR)
         child_env["TMPDIR"] = str(ASCENDC_TMPDIR)
-        result = subprocess.run([
-            "codex", "exec", "--json", "--ephemeral",
-            "--dangerously-bypass-approvals-and-sandbox",
-            "-C", str(ROOT), "-o", str(final_message), agent_prompt(input_path, action),
-        ], cwd=ROOT, env=child_env, stdout=output, stderr=subprocess.STDOUT, text=True)
+        result = subprocess.run(
+            agent_command(item.get("agent_thread_id"), final_message,
+                          agent_prompt(input_path, action)),
+            cwd=ROOT, env=child_env, stdout=output, stderr=subprocess.STDOUT, text=True,
+        )
+    if not item.get("agent_thread_id"):
+        thread_id = thread_id_from_log(run_log)
+        if thread_id:
+            item["agent_thread_id"] = thread_id
     return result.returncode
 
 
@@ -584,13 +899,16 @@ def run_gate(item: dict, action: dict) -> int:
 def run_state_machine(queue: dict) -> None:
     """Advance each operator one durable stage at a time."""
     queue.pop("acceptance", None)
-    queue["mode"] = "controller_state_machine_ephemeral_stage_agents_max_two_rounds"
+    queue["mode"] = "controller_state_machine_one_thread_per_operator_max_four_rounds"
     queue["max_agent_attempts_per_stage"] = MAX_AGENT_ATTEMPTS
     queue["max_repairs_per_version"] = MAX_REPAIRS
+    queue["max_optimization_rounds"] = MAX_OPTIMIZATION_ROUNDS
+    queue["min_improvement_percent"] = MIN_IMPROVEMENT_PERCENT
     index = 0
     while index < len(queue["items"]):
         item = queue["items"][index]
         if item["state"] in TERMINAL_STATES:
+            cleanup_reference_cache(item["operator"])
             index += 1
             continue
         action = durable_action(item["operator"])
@@ -598,11 +916,12 @@ def run_state_machine(queue: dict) -> None:
             item["state"] = action["state"]
             item["result_reason"] = action["reason"]
             item["finished_at"] = datetime.now(timezone.utc).isoformat()
+            cleanup_reference_cache(item["operator"])
             save(queue)
             index += 1
             continue
         item["state"] = "running"
-        item["current_stage"] = f"v{action['version']}:{action['stage']}"
+        item["current_stage"] = stage_key(action)
         item["started_at"] = datetime.now(timezone.utc).isoformat()
         save(queue)
         if action["kind"] == "command":
@@ -637,17 +956,33 @@ def run_state_machine(queue: dict) -> None:
             index += 1
 
 
+def requested_mode(argv: list[str]) -> str:
+    modes = {"--initialize": "initialize", "--rebuild": "rebuild",
+             "--reconcile": "reconcile", "--show-stages": "show-stages"}
+    if argv == ["--help"]:
+        return "help"
+    if not argv:
+        return "run"
+    if len(argv) != 1 or argv[0] not in modes:
+        raise SystemExit("usage: run_level1_regeneration.py [--initialize|--rebuild|--reconcile|--show-stages]")
+    return modes[argv[0]]
+
+
 def main() -> None:
-    if "--initialize" in sys.argv:
+    mode = requested_mode(sys.argv[1:])
+    if mode == "help":
+        print("usage: run_level1_regeneration.py [--initialize|--rebuild|--reconcile|--show-stages]")
+        return
+    if mode == "initialize":
         initialize()
         return
-    if "--rebuild" in sys.argv:
+    if mode == "rebuild":
         rebuild()
         return
-    if "--reconcile" in sys.argv:
+    if mode == "reconcile":
         reconcile()
         return
-    if "--show-stages" in sys.argv:
+    if mode == "show-stages":
         queue = json.loads(QUEUE.read_text())
         for item in queue["items"]:
             action = durable_action(item["operator"])

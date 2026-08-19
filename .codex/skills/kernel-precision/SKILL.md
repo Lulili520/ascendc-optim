@@ -13,7 +13,7 @@ python .codex/skills/kernel-precision/scripts/validate_precision.py \
   <OperatorName> --project-dir <OperatorName_version>
 ```
 
-入口构建 Host/Kernel、安装独立 vendor，并用同一组原始输入运行 reference 和自定义算子。只验证一个原始 shape，输出转 FP32，使用 `atol=1e-2, rtol=1e-2`。
+入口构建 Host/Kernel、安装独立 vendor，并用同一组原始输入运行 reference 和自定义算子。只验证一个原始 shape，输出转 FP32，使用 `atol=1e-2, rtol=1e-2`。同一算子的 reference 源码、初始化参数、Torch 版本和 seed 未变化时，在临时目录复用固定输入与 expected；Kernel 源码变化只重跑自定义算子。缓存不进入训练数据，算子队列终止时清理。
 
 只有退出码 0、输出 `precision=PASS`、`precision.json` 与 `workspace.json` 的 PASS/指纹一致才能采集性能。构建问题记 `BUILD_FAILED`，运行/reference/数值问题记 `PRECISION_FAILED`，失败也必须保存阶段和日志。
 

@@ -1,4 +1,4 @@
 interface:
   display_name: "Kernel Bottleneck"
   short_description: "直接从完整源码认定具体且排他的性能根因"
-  default_prompt: "使用 $kernel-bottleneck 直接分析完整 Host/Kernel 源码，输出能唯一决定 strategy 的具体 cause；不生成 coverage 或 source model。"
+  default_prompt: "使用 $kernel-bottleneck 直接按源码热路径识别最多 3 个兼容根因，严格区分 Scalar 与循环中的 Vector 指令；不生成 coverage、source model 或策略。"

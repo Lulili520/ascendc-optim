@@ -14,7 +14,7 @@
 
 - 首次处理时复制完整可构建工程为 `_0`；复制不等于移动，不删除原始内容。
 - `_0` 已存在时复用，禁止静默覆盖；内容冲突则报告并停止该算子。
-- 新版本依次使用 `_1`、`_2`；从指定父版本复制，未指定则使用最新版本。
+- 新版本依次使用 `_1`、`_2`、`_3`、`_4`；从指定父版本复制，未指定则使用最新版本。
 - 新版本不继承精度、性能和构建中间文件，初始状态为 `PREPARED`。
 - `op_host/` 或 `op_kernel/` 变化后，旧精度和性能立即失效。
 - 每版用 `workspace.json` 记录来源、父版本、vendor、状态、源码指纹及结果路径。
@@ -45,6 +45,7 @@ python .codex/skills/kernel-precision/scripts/validate_precision.py \
 ```
 
 - 用同一组原始输入执行 reference 和自定义算子，只验证一个原始 shape。
+- 同一算子在 reference 源码、初始化参数、Torch 版本和固定 seed 未变化时，可在临时目录复用输入与 reference expected；Kernel 源码变化只重跑自定义算子。缓存不进入工作版本或训练数据，算子终止时清理。
 - 输出转 FP32 统计误差，以 `atol=1e-2, rtol=1e-2` 比较。
 - 仅当退出码为 0、打印 `precision=PASS`，且 `precision/precision.json` 的源码指纹匹配时，状态才是 `PRECISION_PASS`。
 - 成功时保存 shape、dtype、`max_abs`、`mean_abs`、退出码、日志和源码指纹。失败时也生成 `precision/precision.json`：OPP/Kernel/Host 或扩展构建失败记录为 `BUILD_FAILED`，算子运行、reference 或数值比较失败记录为 `PRECISION_FAILED`，并保存粗粒度 `failure_stage`、详细 `stage`、退出码、原因、日志路径和源码指纹。
@@ -66,7 +67,8 @@ python .codex/skills/kernel-performance/scripts/collect_performance.py \
 - 七组指标和 sample-based 逐核 cycle 各用一个独立 `msprof` 进程，各执行一次算子。
 - 七组指标为 `PipeUtilization`、`ArithmeticUtilization`、`Memory`、`MemoryL0`、`MemoryUB`、`L2Cache`、`ResourceConflictRatio`。
 - latency 只取 `PipeUtilization` 的 `Task Duration(us)`；不使用 quick、compare 或 repeats。
-- 七组 CSV、有效 latency 或逐核 cycle 任一缺失，均为 `PERFORMANCE_FAILED`。
+- 当前版本先采正式 `PipeUtilization`；若相对此前完整 `PERFORMANCE_DONE` 最佳版本的 latency 提升不超过 1%，写 `performance/screening.json`、状态置为 `PERFORMANCE_SCREENED_NO_IMPROVEMENT` 并停止，不生成完整 `performance.json`。确有提升时再补齐其余六组与逐核 cycle。
+- 除上述无提升早停外，七组 CSV、有效 latency 或逐核 cycle 任一缺失，均为 `PERFORMANCE_FAILED`。
 - 采集前自动用 `npu-smi` 确认逻辑设备映射，用 CANN `PlatformAscendC` 取得核数、各级容量和 Byte/cycle，并从当前精确 SoC 配置读取额定 Cube 频率。所有可靠设备数值及推导公式保存到 `kernel_workspace/KernelBench910B/hardware/device_<id>.json`；无效或不可取得的数值为 `null`，身份或参数交叉校验不一致时停止。
 - GM 单核峰值带宽只按 CANN HBM Byte/cycle 与额定 Cube MHz 推导，缺少可靠输入时保持 `null`，禁止按芯片名称猜测。频率和原始 Byte/cycle 只留在设备文件，不进入算子 `performance.json`。
 - 采集脚本解析七组 CSV 和逐核 cycle 后，直接生成面向瓶颈分析的 `performance.json`，包含任务、流水线、算术、各级存储、L2、冲突、逐核统计和精简硬件配置；存储部分可包含客观的单核 GM 路径总带宽及峰值利用率。
@@ -89,27 +91,17 @@ level 汇总至少包含：算子、版本、精度误差、latency、活跃核�
 
 瓶颈请求必须使用 `kernel-bottleneck` skill。只分析状态为 `PERFORMANCE_DONE`、源码指纹匹配且报告完整的工作版本；不重复 profiling、不运行 reference、不修改源码。
 
-客观输入直接使用 `performance/performance.json`。直接读取完整 Host/Kernel 源码并输出全部确定源码问题，不生成 `source_model.json`、`coverage.json` 或候选处置记录；性能原值只补充影响和因果一致性，不使用固定 Bound 阈值筛选问题。高流水线占比可以是健康终态，不能直接生成瓶颈。
-
-`bottleneck.json` 只包含 `reasoning`、`issues`。每个 issue 包含 `evidence` 和 `bottleneck`；每个 cause 必须有直接源码 evidence，性能 evidence 可选。reasoning 与 issues 同序，简洁说明源码事实和执行机制；不因固定中文前缀、长度或 symbol 重载阻断。同一源码机制只保留根因 cause。全部 issues 按“前置依赖、影响一致性、热路径乘数、源码顺序”排序并完整保留；`issues=[]` 表示没有确定问题。
+输入只使用完整 Host/Kernel、`performance.json` 和阶段内临时 `source_facts`。按 skill 完整扫描所有执行阶段，输出有直接源码 evidence、按可消除热路径成本排序的最多 3 个确定 cause；性能只补充影响，不按 ratio/Bound 阈值产生问题。只写 `bottleneck.json`，不生成 coverage、source model 或候选处置文件。
 
 ## 策略推导
 
-策略请求必须使用 `kernel-strategy` skill，并以通过校验的全部 issues 和当前源码为输入。每个具体 cause 必须唯一映射到一个固定 strategy 和 operation，`strategies[]` 按 issues 顺序完整覆盖；若 cause 仍需选择方向，应在 bottleneck taxonomy 中拆分而不是由策略阶段重诊断。先形成共享的最终 tiling、Buffer、任务映射、搬运、dtype 和 ABI 设计，再具体化 actions；同一源码对象不得有冲突变换，共享参数必须一致。
-
-`strategy.json` 只包含 `reasoning`、`strategies`。每个 strategy 包含 `cause_key`、`strategy_key`、`actions`；action 使用真实 target、固定 operation、具体 edits 和 constraints。operation slots 是语义检查清单，不因拆分数量、顺序、固定措辞或辅助 performance evidence 未重复而阻断。数学语义/ABI 必然破坏、API/dtype 明确禁止或容量公式无解才是 Strategy 硬阻断；其余不确定性交给实施和编译。
+策略请求必须使用 `kernel-strategy` skill。按固定 `cause→strategy→operation` 覆盖全部 issues，不重新诊断。全轮最多 6 个 actions，可包含多个主体变化，但必须共享唯一且无冲突的任务、tiling、容量、地址、dtype、对齐、tail、同步和 ABI 设计；参数来自 shape、可靠硬件与静态约束，不生成候选或上板试参。
 
 ## 策略实施
 
-实施请求必须使用 `kernel-implementation` skill。以父版本通过校验的可执行 `strategy/strategy.json` 为不可改写输入，创建下一个未占用的新版本，只修改新版本的 `op_host/` 和 `op_kernel/`。下游执行 agent 按顺序实施全部 actions 中的 `target + operation + edits + constraints`，不得替换策略、遗漏 action 或混入其他优化。
+实施请求必须使用 `kernel-implementation` skill。控制器创建干净 child 并冻结 strategy；实施只读取 actions 相关的通用契约和精确 SoC 架构覆盖层，未知架构只查当前 SDK headers。按序实施全部 actions，只修改 child 的 `op_host/`、`op_kernel/` 并记录 `implementation.json`；不得重选、遗漏或扩展策略。validator 最多执行两次。仅 target 不存在、API/dtype 明确禁止、容量无解或 ABI/数学语义必坏时阻断。
 
-下游只在 target 无法定位到任何真实源码对象、API/dtype 明确禁止、容量公式证明无解或无法保持 ABI/数学语义时停止。不确定 API 或尚未证明收益不是阻断理由，应进入实施和编译验证。
-
-具体落地记录写入新版本 `strategy/implementation.json`：保留 `strategy_keys`、action 修改摘要、真实修改文件和最多 3 次修复轨迹。action 覆盖、修改边界、target 真实变化和门禁顺序是硬校验；reasoning 固定措辞、条数、action_index 重复引用和反模式文本计数只作审计。
-
-cause 到 strategy 是确定性转换；每个 action 的 target、operation、edits、constraints 是策略 Agent 针对当前源码生成的可执行方案，实施 Agent 按顺序忠实执行全部 strategies，不重新选择、遗漏或扩展策略。
-
-实施记录校验通过后，先使用 `kernel-precision` 验证新版本。构建或精度失败时停止本次验证，不采性能；依据直接证据可在原 action 范围内最小修复，最多修复 3 次，每次源码变化后重新校验 implementation 并从构建开始验证。修复用尽仍失败则停止该算子。精度通过后再使用 `kernel-performance` 采集性能；性能采集失败不触发源码修复。性能完成后必须对新版本重新运行完整 bottleneck 分析，用于判断是否需要下一轮；训练样本资格不要求父版本 cause 在子版本消失，只要求执行链完整且正式 latency 严格下降超过 1%。新版本的全部确定问题继续进入下一版本，直到 `issues=[]`、达到任务轮次上限或硬失败。
+实施记录校验通过后，先使用 `kernel-precision` 验证新版本。构建或精度失败时停止本次验证，不采性能；依据直接证据可在原 action 范围内最小修复，最多修复 3 次，每次源码变化后重新校验 implementation 并从构建开始验证。修复用尽仍失败则停止该算子。精度通过后再使用 `kernel-performance` 采集性能；性能采集失败不触发源码修复。子版本相对此前所有已完成版本中的最低正式 latency 必须严格下降超过 1%；否则记录 `stopped_no_improvement`，保留历史最佳版本并停止该算子，禁止让退化版本进入下一轮。收益通过后把新版本视为全新 Kernel 重新运行完整 bottleneck 分析，不只复检父 cause。新版本的全部确定问题继续进入下一版本，直到 `issues=[]`、完成四轮优化或硬失败；达到 `_4` 仍有 issues 时记录为“四轮完成但残留瓶颈”，不得标记优化完成或创建 `_5`。
 
 ## 可追溯优化数据
 

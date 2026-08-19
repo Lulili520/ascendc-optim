@@ -5,10 +5,10 @@ description: 直接分析 AscendC KernelBench 910B 单算子的完整 Host/Kerne
 
 # Kernel Bottleneck
 
-1. 校验当前 `performance.json` 与源码指纹，完整阅读 [bottleneck-method.md](references/bottleneck-method.md)。
-2. 直接读取全部 `op_host/`、`op_kernel/` 源码；由 shape、axis、dtype 和数学语义理解实际分支，再跟踪 tiling、任务映射、搬运、计算、写回、tail、Buffer 与同步。
-3. 输出全部确定 issues。`cause_key` 必须具体、排他且有直接源码 evidence，并足以唯一决定一个 `strategy_key`；现象或影响不得重复提升为第二 cause。
-4. 按前置依赖、性能影响一致性、热路径乘数和源码顺序去重排序；无问题时输出 `issues=[]`。
-5. 只写入 `bottleneck/bottleneck.json` 并运行 `scripts/validate_report.py`。不生成 `coverage.json`、`source_model.json` 或候选处置记录。
+1. 校验当前 `performance.json` 与源码指纹，完整阅读 [分析方法](references/bottleneck-method.md) 和机器定义的 [cause taxonomy](references/cause-taxonomy.json)。
+2. 先读取阶段输入中的 `source_facts`（独立调用时运行 `scripts/source_facts.py --project-dir <version>`），再完整读取 `op_host/`、`op_kernel/`。由 shape、axis、dtype 和数学语义理解实际分支，依次完成数学热路径、GM→片上搬运、Scalar/Vector/Cube 计算、写回、片上布局与生命周期、同步与 Queue 流水、Host tiling、task/block/core 映射、tail/dtype/ABI 审查。facts 只存在于阶段输入，不生成额外覆盖文件。
+3. 完整扫描后只输出最多 3 个确定且能共享同一优化方向的 issues。LocalTensor `Compare/Select/Reduce` 即使位于 C++ 循环中也是 Vector 计算，禁止仅凭循环标为 `scalar_reduction`。
+4. 按源码热路径依次处理：逐元素 GM→碎片/跨步搬运→真正 Scalar 计算→过小 work unit/重复 Vector 指令→GM 往返/物化→写回→多核→流水。小 tile 直接造成 block 过多时只保留 `inefficient_work_unit_size`；单 Queue 槽只提示检查，不足以生成流水 cause。无问题时输出 `issues=[]`。
+5. 只写入 `bottleneck/bottleneck.json` 并运行 `scripts/validate_report.py`。`source_facts` 中的 `candidate_causes` 只提示需要阅读的源码形态，不强制生成 issue；校验器只检查 schema、固定 cause 映射和直接源码 target。不生成 `coverage.json`、`source_model.json` 或候选处置记录。
 
 禁止从最高 pipeline ratio 或固定阈值直接生成瓶颈；不生成策略或修改建议。

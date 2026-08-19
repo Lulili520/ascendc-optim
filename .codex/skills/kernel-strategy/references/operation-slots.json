@@ -5,7 +5,7 @@
   "rebalance_task_partition": {"required": ["total_tasks", "base_and_remainder", "per_core_range", "coverage"], "optional": []},
   "rebalance_weighted_partition": {"required": ["task_cost", "weighted_boundary", "per_core_range", "coverage"], "optional": []},
   "coarsen_task_partition": {"required": ["current_task_granularity", "persistent_block_count", "strided_task_loop", "coverage_and_tail"], "optional": []},
-  "resize_work_unit": {"required": ["active_buffer_budget", "candidate_work_unit", "task_parallelism", "alignment_and_tail"], "optional": []},
+  "resize_work_unit": {"required": ["active_buffer_budget", "selected_work_unit", "task_parallelism", "alignment_and_tail"], "optional": []},
   "coalesce_global_transfer": {"required": ["scalar_or_small_access", "contiguous_range", "batch_transfer", "alignment_and_tail"], "optional": []},
   "batch_strided_transfer": {"required": ["repeated_transfer", "regular_address_relation", "batch_transfer_parameters", "alignment_and_tail"], "optional": []},
   "vectorize_gather_access": {"required": ["scalar_index_access", "offset_vector", "gather_sequence", "bounds_and_tail"], "optional": []},

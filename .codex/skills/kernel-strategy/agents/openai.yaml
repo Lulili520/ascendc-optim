@@ -1,4 +1,4 @@
 interface:
   display_name: "Kernel Strategy"
   short_description: "把具体 cause 确定映射为唯一源码策略"
-  default_prompt: "使用 $kernel-strategy 按固定 cause→strategy→operation 映射，为全部 issues 生成有序原子 actions，不重新选择修改方向。"
+  default_prompt: "使用 $kernel-strategy 按算子模式、最大合法 tile、搬运 chunk、计算、Buffer 和必要同步生成固定 cause→strategy actions；不搜索或试参。"

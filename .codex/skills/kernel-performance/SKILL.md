@@ -13,7 +13,7 @@ python .codex/skills/kernel-performance/scripts/collect_performance.py \
   <OperatorName> --device 0 --project-dir <OperatorName_version>
 ```
 
-入口校验 precision/源码/vendor，探测当前硬件，预热一次，再用独立 `msprof` 进程采集七组正式指标和逐核 cycle。任一组、正数 `Task Duration(us)` 或逐核 cycle 缺失时记 `PERFORMANCE_FAILED`。
+入口校验 precision/源码/vendor，探测当前硬件并预热一次。先用独立 `msprof` 采集正式 `PipeUtilization` latency；若当前工作版本相对同算子此前完整版本的最佳 latency 提升不超过 1%，写入 `screening.json` 并早停，不生成或冒充完整 `performance.json`。确有提升时再采集其余六组正式指标和逐核 cycle；任一组或逐核 cycle 缺失时记 `PERFORMANCE_FAILED`。
 
 结果固定更新 `performance/`；latency 只取 `PipeUtilization`。`performance.json` 保存客观任务、流水、存储、冲突、逐核和精简硬件数据，不输出 Bound 或建议。无法可靠取得的硬件值保持 `null`，禁止按芯片名称猜测。
 
