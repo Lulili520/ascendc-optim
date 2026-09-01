@@ -1,15 +1,13 @@
 ---
 name: kernel-strategy
-description: 将 kernel-bottleneck 已排序的具体 cause_key 确定性映射为唯一 strategy_key 和 operation，再生成当前源码原子 actions；保持依赖顺序并覆盖所有问题，不重新诊断、不修改源码、不执行优化。
+description: 完整分析 AscendC KernelBench 910B 单算子源码中的全部确定问题，按固定类别顺序统一设计并在一轮中全部修复，生成含显式证据链且可独立验证的闭合策略。
 ---
 
 # Kernel Strategy
 
-1. 校验 `bottleneck/bottleneck.json`。
-2. 用 `scripts/derive_strategy.py` 按原顺序执行 `cause_key → 唯一 strategy_key → 唯一 operation`；`strategies[]` 必须与 `issues[]` 一一对应，不在本阶段选择候选方向。
-3. 按 operations 只读取 `../../kernel-knowledge/action-pattern-knowledge.md` 的相关章节，按“算子模式→最大合法有效 tile→搬运 chunk→计算→Buffer→必要同步”形成一套共享设计。AR/ARA/With-Index、Elementwise 和 Cube 使用各自确定公式，不搜索参数；已有 Vector 路径优先扩大合法 work unit，禁止无依据改成 Transpose/Gather。架构 API 细节留给 implementation。
-4. 按 [action-contract.md](references/action-contract.md) 将共享设计拆为每个 cause 的最少 actions，全部 strategies 合计不超过 6 个 actions；同一 strategy 不混入其他 cause，但全部 strategies 共同覆盖已输出问题。按“任务与 tiling→搬运→驻留/Buffer→计算→流水/同步→写回/tail”依赖具体化；若前项改变后项 target 或公式，后项必须引用修改后的共同结构。
-5. 仅在 ABI/数学语义必然破坏、API/dtype 明确禁止或容量公式无解时写 `strategy/blocking.json`；其余不确定性交给实施和编译。
-6. 运行 `scripts/validate_strategy.py`；校验器只检查 cause→strategy→operation、issue 覆盖、真实 target 和非空 edits/constraints。容量、API、对齐和 dtype 的普通不确定性交给实施与编译，只有已证明无解才阻断。
+1. 完整读取阶段 input、[源码策略方法](references/source-strategy-method.md)、列出的 Host/Kernel、device 与 `knowledge_contract`。只使用这些输入；禁止读取 reference、性能、CMake、validator 源码、其他算子或历史结果，也禁止递归搜索 SDK。
+2. 从 shape/dtype 和全部输出路径恢复数学语义、主引擎、任务所有权、数据流与跨 tile 状态；先识别 Elementwise、Prefix/Scan、Reduction、Norm/Softmax、Window/Pooling、contraction/Cube 等数学模式和支配性跨迭代依赖，再按方法文件完成语义、所有权、地址/tail、容量/生命周期、状态、指令/workspace、同步和 ABI 审计及全部性能扫描。Prefix/Scan 必须读取 input 已选择的 `prefix-scan` 与架构 `vector` 契约。首次引入 Cube 只在 input 契约与当前 SDK 足以闭合 API、MNK、格式、L1/L0、重载、所有权、同步和 ABI 时冻结，否则记 unresolved 并继续扫描。若有 `replan_feedback`，将已证伪结构作为硬约束。
+3. 只冻结契约确认的 API 家族，参数由 shape、可靠容量、字段范围和任务数唯一推导。所有 changes 共享一致的任务、tile、Buffer、地址、dtype、对齐、tail、同步和 ABI。内部区分 actionable、unresolved 与 clean，仅 actionable 进入既有七种 kinds；全量扫描后没有 actionable 才写 `{"strategy":null}`，该值不得解释为源码绝对无问题。
+4. 非空方案依次写 `strategy/planning.json` 和 `strategy/strategy.json`，使用 input 的 `validation_commands` 每轮同时运行两个 validator。纯 schema、格式或引用错误可合并修复并复检，最多 3 次；CLI 调用错误不计次数，相同错误连续两次才停止。不得借校验重选策略，禁止预读 validator。不要修改源码或运行 precision/performance。
 
-不重新诊断、预测收益或修改 bottleneck。
+本 skill 不修改源码。

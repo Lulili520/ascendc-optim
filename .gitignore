@@ -1,4 +1,5 @@
 /kernel/
+/kernel_eval_workspace/
 /kernel_workspace/
 /kernel_workspace_eval/
 /train_result/

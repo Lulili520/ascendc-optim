@@ -1,101 +1,34 @@
-# Kernel Policy Data Contract
-
-## Record
+# Source Policy 数据契约
 
 ```json
-{
-  "system_prompt": "你是 AscendC Kernel 性能策略教师……",
-  "input": "[OPERATOR]\n...\n\n[PERF]\n...\n\n[HOST]\n...\n\n[KERNEL]\n...",
-  "output": "{\"strategies\":[...]}",
-  "ops": "ArgmaxOverADimensionCustom_0"
-}
+{"system_prompt":"...","input":"...","output":"...","ops":"Operator_0"}
 ```
 
-四个字段都是字符串。`ops` 等于父工作版本目录名，版本后缀不可删除。固定任务说明和 key 契约直接写入每条记录的 `system_prompt`，并在同目录保留内容完全相同的 `kernel_policy_system_prompt.txt` 供独立加载与审计。
-
-## Parent and child
+`input`：
 
 ```text
-parent _0 policy -> child _1 result
-parent _1 policy -> child _2 result
-parent _2 policy -> child _3 result
-parent _3 policy -> child _4 result
-```
-
-父版本提供训练输入和答案；子版本只提供 latency 以筛选正收益。资格条件：
-
-- 父子状态、precision 和源码指纹与当前版本一致；
-- 父子 performance latency 有限且为正；
-- 父 bottleneck/strategy 非空并通过现行校验；
-- 子 implementation 完整关联父 actions，且声明文件、真实 diff、action targets 完全一致；
-- manifest 项与父版本完整 HOST/KERNEL 源码存在；
-- `(parent_latency-child_latency)/parent_latency*100 > 1.0`。
-
-旧工作区不满足门禁时显式排除，不做兼容性降级。
-
-## Shared system prompt
-
-导出器从以下 canonical source 动态生成共享 prompt：
-
-- bottleneck cause taxonomy/validator；
-- strategy 的 `cause→strategy→operation` 推导器；
-- operation slots；
-- policy knowledge 中的决策顺序与 action 字段。
-
-Prompt 定义任务、最多 3 个问题、最多 6 个 actions、唯一输出形状和全部固定映射。`cause_rules` 与 `operation_slots` 分别使用一次 `*_fields` 表头和等长行数组，消除重复字段名但不删除任何映射或槽位。每条样本直接携带完全相同的 prompt，审计保存 prompt 与 canonical source 的 SHA-256，防止训练契约静默漂移。
-
-## Input
-
-固定顺序：
-
-```text
-[OPERATOR]
-<operator、level、function、parameters 的紧凑 JSON>
-
-[PERF]
-<任务规格、pipeline ratio、GM/L2/冲突、逐核和可靠容量；不含绝对 latency>
+[OP]
+算子名、function、parameters
 
 [HOST]
---- FILE: op_host/<relative path> ---
-<父版本完整文本>
+完整有效 op_host C/C++/H 源码
 
 [KERNEL]
---- FILE: op_kernel/<relative path> ---
-<父版本完整文本>
+完整有效 op_kernel C/C++/H 源码
 ```
 
-不输入 reference、答案提示 symbol、固定知识、输出模板、子版本信息或收益结果。源码不按答案 target 裁剪。
+只机械删除版权头、纯注释和连续空行，不按答案 target 裁剪源码，不包含 PERF、reference、child、latency 或收益。
 
-## Output
-
-`output` 是可直接解析的紧凑 JSON 字符串：
+`output` 优先使用从当前输入版本到正式最佳版本、针对起始源码独立归一化并校验的统一策略：
 
 ```json
-{
-  "strategies": [
-    {
-      "bottleneck_key": "...",
-      "cause_key": "...",
-      "evidence": ["..."],
-      "strategy_key": "...",
-      "reasoning": ["<bottleneck reasoning>", "<strategy reasoning>"],
-      "actions": [
-        {
-          "target": "...",
-          "operation": "...",
-          "edits": ["..."],
-          "constraints": ["..."]
-        }
-      ]
-    }
-  ]
-}
+{"strategy":{"kinds":["..."],"evidence":["文件::symbol | 源码事实 | 静态成本公式"],"reasoning":["..."],"targets":["..."],"changes":["..."],"guards":["..."]}}
 ```
 
-父 bottleneck 与 strategy 按相同位置和 `cause_key` 双重校验后合并。每个 item 是一个完整监督单元；不另设 bottleneck/strategy 两个答案字段，不改写已校验的 evidence、reasoning 或 actions。
+单轮策略原样使用。多轮策略禁止机械拼接：只有 `terminal_policy.json` 已基于起始源码、最终源码和全部有效步骤重新生成，并保证 evidence 可从起始源码定位、changes 表达 initial-to-final、reasoning 是重新生成的六段统一推理时才导出长链；否则降级为父子单轮有效策略。不复制中间源码，不保留中间参数或跨版本“现状”。
 
-## Audit only
+执行链内部的 `planning.json` 仅用于验证策略确由当前源码的计算模式、布局和完整静态工作向量推出，不复制进 input 或 output。
 
-以下内容只进入 `<dataset>.audit.json`：父子 latency、收益、资格和排除原因、input/output 字符数，以及 dataset、system prompt 和 canonical source 的 hash。
+当前队列管理的算子只有进入终态后才能导出；不在当前目标队列中的历史算子按其持久有效链导出。连续链上的每个子版本必须精度 PASS 且相对此前历史最佳 Task Duration 严格下降超过 1%。正式训练集只包含非空有效策略；`strategy:null` 终态只写 audit，不进入 JSONL。性能无收益的失败策略不得作为答案。运行中、待重试和中间版本不导出；无效步骤及其后续不跨越拼接。latency、收益、源码指纹和排除原因只写 audit。
 
-同一算子的 `_0` 到 `_3` 必须按去掉版本后缀的算子名进入同一 train/valid/test 分组；最终 `ops` 仍保留版本。
+导出时重新运行现行 planning、strategy 和 implementation validator；非空策略必须减少静态工作，或在每输出热路径工作不增加时提高有效核覆盖；已有Cube的任务展开不得增加A/B热路径重载或格式转换。执行期 compile/precision repair、replan反馈和未接受child均不进入input/output。

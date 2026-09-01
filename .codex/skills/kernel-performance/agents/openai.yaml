@@ -1,4 +1,4 @@
 interface:
   display_name: "AscendC 算子性能采集"
-  short_description: "采集 AscendC 完整硬件指标并生成正式性能报告"
-  default_prompt: "使用 $kernel-performance 采集单个 AscendC 算子的性能指标并生成报告。"
+  short_description: "预热一次并采集一次正式 Task Duration"
+  default_prompt: "使用 $kernel-performance 验证精度门禁，预热一次，再用一次 PipeUtilization 采集 Task Duration。"

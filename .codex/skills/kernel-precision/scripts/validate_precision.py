@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import importlib
 import importlib.util
@@ -19,13 +20,19 @@ from pathlib import Path
 
 
 WORKSPACE = Path(__file__).resolve().parents[4]
-PROJECT_ROOT = WORKSPACE / "kernel/KernelBench910B"
-MANIFEST = PROJECT_ROOT / "manifest.json"
-REFERENCES = WORKSPACE / "kernel/pytorch-references/KernelBench"
+sys.path.insert(0, str(WORKSPACE / ".codex"))
+from suite_config import SUITES, load_suite_manifest, suite_paths
+
+SUITE = "KernelBench910B"
+PROJECT_ROOT, _, REFERENCES = suite_paths(WORKSPACE, SUITE)
 ACTIVATE = Path("/data/lu/activate_evokernel.sh")
 ATOL = RTOL = 1e-2
 REFERENCE_CACHE = Path("/data/lu/ascendc-tmp/kernel_precision_reference_cache")
 REFERENCE_SEED = 1234
+OPP_INSTALL_LOCK = Path("/data/lu/ascendc-tmp/kernel_opp_install.lock")
+ENVIRONMENT_TOKENS = ("no space left on device", "not enough space left",
+                      "device or resource busy", "resource temporarily unavailable")
+KERNEL_ENTRY_TOKENS = ("binarygetfunctionbyentry", "rtsfuncgetbyentry", "funcentry=0")
 
 
 def quote(value: Path | str) -> str:
@@ -33,7 +40,13 @@ def quote(value: Path | str) -> str:
 
 
 def load_manifest() -> dict:
-    return json.loads(MANIFEST.read_text())
+    return load_suite_manifest(WORKSPACE, SUITE)
+
+
+def configure_suite(suite: str) -> None:
+    global SUITE, PROJECT_ROOT, REFERENCES
+    SUITE = suite
+    PROJECT_ROOT, _, REFERENCES = suite_paths(WORKSPACE, suite)
 
 
 def resolve_operator(name: str, project_dir: str | None = None) -> tuple[dict, Path]:
@@ -52,14 +65,15 @@ def resolve_operator(name: str, project_dir: str | None = None) -> tuple[dict, P
     return item, project
 
 
-def run_bash(script: str, log_path: Path) -> None:
+def run_bash(script: str, log_path: Path, append: bool = False) -> None:
     log_path.parent.mkdir(exist_ok=True)
     completed = subprocess.run(
         ["bash", "-lc", script], text=True,
         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
     )
     output = completed.stdout or ""
-    log_path.write_text(output, encoding="utf-8")
+    with log_path.open("a" if append else "w", encoding="utf-8") as handle:
+        handle.write(output)
     if output:
         print(output, end="" if output.endswith("\n") else "\n", flush=True)
     if completed.returncode != 0:
@@ -121,9 +135,12 @@ def write_failure(
         log_path.parent.mkdir(exist_ok=True)
         log_path.write_text(str(error) + "\n", encoding="utf-8")
     relative_log = log_path.relative_to(project).as_posix()
+    failure_status = ("ADAPTER_MISSING" if failure_stage == "adapter" else
+                      "ENVIRONMENT_FAILED" if failure_stage == "environment" else
+                      "BUILD_FAILED" if failure_stage == "build" else "PRECISION_FAILED")
     result = {
         "operator": name,
-        "status": "FAILED",
+        "status": failure_status,
         "exit_code": exit_code,
         "failure_stage": failure_stage,
         "stage": stage,
@@ -145,10 +162,10 @@ def write_failure(
     workspace = json.loads(workspace_path.read_text()) if workspace_path.is_file() else {}
     workspace.update({
         "operator": name,
-        "status": "BUILD_FAILED" if failure_stage == "build" else "PRECISION_FAILED",
+        "status": failure_status,
         "source_fingerprint": fingerprint,
         "precision": {
-            "status": "NOT_RUN" if failure_stage == "build" else "FAILED",
+            "status": "NOT_RUN" if failure_stage in {"adapter", "build", "environment"} else "FAILED",
             "exit_code": exit_code,
             "failure_stage": failure_stage,
             "stage": stage,
@@ -164,8 +181,18 @@ def write_failure(
     )
 
 
+def is_kernel_entry_error(error: BaseException, log_path: Path) -> bool:
+    values = [str(error)]
+    if isinstance(error, subprocess.CalledProcessError) and error.output:
+        values.append(str(error.output))
+    if log_path.is_file():
+        values.append(log_path.read_text(encoding="utf-8", errors="replace"))
+    text = "\n".join(values).lower()
+    return any(token in text for token in KERNEL_ENTRY_TOKENS)
+
+
 def build_opp(name: str, item: dict, project: Path, log_path: Path) -> None:
-    print(f"[1/3] 编译并部署 {name} 的 op_host/op_kernel", flush=True)
+    print(f"[1/3] 并发编译、加锁部署 {name} 的 op_host/op_kernel", flush=True)
     run_bash(
         f"""
 set -euo pipefail
@@ -175,10 +202,25 @@ grep -q '"value": "ascend910b"' CMakePresets.json
 bash build.sh
 package=$(find build_out -maxdepth 1 -type f -name 'custom_opp_*.run' -print -quit)
 test -n "$package"
-bash "$package" --quiet --install-path="$ASCEND_HOME_PATH/opp"
 """,
         log_path,
     )
+    OPP_INSTALL_LOCK.parent.mkdir(parents=True, exist_ok=True)
+    with OPP_INSTALL_LOCK.open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        print(f"[1/3] 获得 OPP 安装锁：{name}", flush=True)
+        run_bash(
+            f"""
+set -euo pipefail
+source {quote(ACTIVATE)}
+cd {quote(project)}
+package=$(find build_out -maxdepth 1 -type f -name 'custom_opp_*.run' -print -quit)
+test -n "$package"
+bash "$package" --quiet --install-path="$ASCEND_HOME_PATH/opp"
+""",
+            log_path,
+            append=True,
+        )
 
 
 def ensure_extension(name: str, item: dict, project: Path, log_path: Path) -> None:
@@ -228,10 +270,26 @@ source {quote(vendor_env)}
 set -u
 export PYTHONPATH={quote(project / 'CppExtension')}${{PYTHONPATH:+:${{PYTHONPATH}}}}
 exec python {quote(Path(__file__).resolve())} --internal-run {quote(name)} \
-  --project-dir {quote(project)}
+  --project-dir {quote(project)} --suite {quote(SUITE)}
 """,
         log_path,
     )
+
+
+def argument_metadata(name: str, value, torch) -> dict:
+    if isinstance(value, torch.Tensor):
+        return {"name": name, "shape": list(value.shape), "dtype": str(value.dtype)}
+    return {"name": name, "value": value, "type": type(value).__name__}
+
+
+def is_environment_error(error: BaseException, log_path: Path) -> bool:
+    values = [str(error)]
+    if isinstance(error, subprocess.CalledProcessError):
+        values.append(str(error.output or ""))
+    if log_path.is_file():
+        values.append(log_path.read_text(encoding="utf-8", errors="replace"))
+    text = "\n".join(values).lower()
+    return any(token in text for token in ENVIRONMENT_TOKENS)
 
 
 def cleanup_artifacts(item: dict, project: Path) -> None:
@@ -434,11 +492,54 @@ def reference_cache_path(name: str, reference_path: Path, init_args: list, torch
     digest.update(repr(init_args).encode())
     digest.update(str(torch.__version__).encode())
     digest.update(str(REFERENCE_SEED).encode())
+    adapter_path = Path(__file__).with_name("subgraph_adapters.py")
+    if adapter_path.is_file():
+        digest.update(adapter_path.read_bytes())
     safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", name)
     return REFERENCE_CACHE / f"{safe_name}.{digest.hexdigest()[:20]}.pt"
 
 
-def prepare_call(name: str, item: dict, project: Path, torch):
+def payload_bytes(value, torch) -> int:
+    if isinstance(value, torch.Tensor):
+        return value.numel() * value.element_size()
+    if isinstance(value, dict):
+        return sum(payload_bytes(item, torch) for item in value.values())
+    if isinstance(value, (list, tuple)):
+        return sum(payload_bytes(item, torch) for item in value)
+    return 0
+
+
+def save_reference_cache(cache_path: Path, payload: dict, torch) -> bool:
+    """Best-effort atomic cache publication; cache I/O must not fail precision."""
+    required = payload_bytes(payload, torch)
+    free = shutil.disk_usage(cache_path.parent).free
+    reserve = 512 * 1024 * 1024
+    if free < required + reserve:
+        print(
+            f"REFERENCE_CACHE_SKIPPED=insufficient_space required={required} free={free}",
+            flush=True,
+        )
+        return False
+    temporary = cache_path.with_suffix(".pt.tmp")
+    try:
+        try:
+            torch.save(payload, temporary)
+            temporary.replace(cache_path)
+            return True
+        except (OSError, RuntimeError) as error:
+            # The expected tensor is already available in memory.  A cache is
+            # only an acceleration for later runs, never a correctness gate.
+            print(
+                "REFERENCE_CACHE_SKIPPED=write_failed "
+                f"error={type(error).__name__}:{error}",
+                flush=True,
+            )
+            return False
+    finally:
+        temporary.unlink(missing_ok=True)
+
+
+def prepare_call(name: str, item: dict, project: Path, torch, with_reference: bool = True):
     reference_path = REFERENCES / item["reference_candidates"][0]
     if not reference_path.is_file():
         raise RuntimeError(f"本地 PyTorch reference 不存在：{reference_path}")
@@ -447,37 +548,32 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     model = reference.Model(*init_args).eval().npu()
     cache_path = reference_cache_path(name, reference_path, init_args, torch)
     inputs = None
-    expected = None
-    if cache_path.is_file():
-        print(f"REFERENCE_CACHE_HIT={cache_path}", flush=True)
+    if with_reference and cache_path.is_file():
         cached = torch.load(cache_path, map_location="cpu", weights_only=False)
-        inputs_cpu = cached["inputs"]
-        expected_cpu = cached["expected"]
+        if "model_state" in cached:
+            print(f"REFERENCE_CACHE_HIT={cache_path}", flush=True)
+            model.load_state_dict(cached["model_state"])
+            inputs_cpu = cached["inputs"]
+            expected_cpu = cached["expected"]
+        else:
+            # An expected tensor is only reusable with the exact parameters
+            # that produced it.  Legacy caches without model_state are unsafe.
+            print(f"REFERENCE_CACHE_INVALID={cache_path}:missing_model_state", flush=True)
+            cached = None
     else:
+        cached = None
+    if cached is None:
         print("INPUT_START", flush=True)
         inputs_cpu = reference.get_inputs()
         print("INPUT_DONE", flush=True)
-        inputs_for_reference = [to_npu(value, torch) for value in inputs_cpu]
-        print("REFERENCE_START", flush=True)
-        with torch.inference_mode():
-            expected = model(*inputs_for_reference)
-        torch.npu.synchronize()
-        print("REFERENCE_DONE", flush=True)
-        if not isinstance(expected, torch.Tensor):
-            raise RuntimeError("当前精度脚本要求 reference 返回单个 Tensor")
-        expected_cpu = expected.detach().cpu().contiguous()
         inputs_cpu = to_cpu(inputs_cpu, torch)
-        REFERENCE_CACHE.mkdir(parents=True, exist_ok=True)
-        temporary = cache_path.with_suffix(".pt.tmp")
-        torch.save({"inputs": inputs_cpu, "expected": expected_cpu}, temporary)
-        temporary.replace(cache_path)
-        print(f"REFERENCE_CACHE_SAVED={cache_path}", flush=True)
-        inputs = inputs_for_reference
     if inputs is None:
         inputs = [to_npu(value, torch) for value in inputs_cpu]
-    if expected is None:
-        expected = expected_cpu.npu().contiguous()
-    del inputs_cpu, expected_cpu
+
+    from subgraph_adapters import prepare_subgraph
+    prepared_subgraph = prepare_subgraph(name, model, inputs, torch)
+    subgraph_values = prepared_subgraph[0] if prepared_subgraph is not None else {}
+    subgraph_expected = prepared_subgraph[1] if prepared_subgraph is not None else None
 
     forward_names = list(inspect.signature(model.forward).parameters)
     values = {norm(key): value for key, value in zip(forward_names, inputs)}
@@ -493,6 +589,13 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     named_items = list(named_parameters.items()) + list(named_buffers.items())
     values.update({norm(key): value for key, value in named_parameters.items()})
     values.update({norm(key): value for key, value in named_buffers.items()})
+    normalized_subgraph_values = {
+        norm(key): value for key, value in subgraph_values.items()
+    }
+    # An explicit adapter describes the exported subgraph ABI and therefore
+    # overrides generic model-name matching (for example gamma is not always a
+    # GroupNorm weight, and some kernels require a flattened parameter view).
+    values.update(normalized_subgraph_values)
 
     aliases = {
         "self": norm(forward_names[0]) if forward_names else "",
@@ -510,7 +613,7 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     used_named_values = set()
     for position, (parameter, cpp_type) in enumerate(parameters):
         key = norm(parameter)
-        lookup = aliases.get(key, key)
+        lookup = key if key in normalized_subgraph_values else aliases.get(key, key)
         lookup = lookup.removesuffix("double").removesuffix("float")
         variants = parameter_variants(lookup)
         value = next((values[candidate] for candidate in variants if candidate in values), None)
@@ -554,7 +657,28 @@ def prepare_call(name: str, item: dict, project: Path, torch):
     sys.path.insert(0, str(project / "CppExtension"))
     extension = importlib.import_module(item["extension_module"])
     custom = getattr(extension, function)
-    return inputs, expected, custom, custom_args, reference_path
+
+    def load_expected_after_smoke():
+        if cached is not None:
+            return to_npu(expected_cpu, torch)
+        print("REFERENCE_START", flush=True)
+        with torch.inference_mode():
+            expected = subgraph_expected if subgraph_expected is not None else model(*inputs)
+        torch.npu.synchronize()
+        print("REFERENCE_DONE", flush=True)
+        saved_expected = to_cpu(expected, torch)
+        REFERENCE_CACHE.mkdir(parents=True, exist_ok=True)
+        model_state = {key: value.detach().cpu().contiguous() for key, value in model.state_dict().items()}
+        cached_to_disk = save_reference_cache(
+            cache_path,
+            {"inputs": inputs_cpu, "expected": saved_expected, "model_state": model_state},
+            torch,
+        )
+        if cached_to_disk:
+            print(f"REFERENCE_CACHE_SAVED={cache_path}", flush=True)
+        return expected
+
+    return inputs, custom, custom_args, reference_path, load_expected_after_smoke, init_args
 
 
 def precision(name: str, project_dir: str | None = None) -> None:
@@ -563,7 +687,7 @@ def precision(name: str, project_dir: str | None = None) -> None:
 
     item, project = resolve_operator(name, project_dir)
     torch.manual_seed(REFERENCE_SEED)
-    inputs, expected, custom, custom_args, reference_path = prepare_call(
+    inputs, custom, custom_args, reference_path, load_expected, init_args = prepare_call(
         name, item, project, torch
     )
     print("CUSTOM_START", flush=True)
@@ -571,26 +695,70 @@ def precision(name: str, project_dir: str | None = None) -> None:
         actual = custom(*custom_args)
     torch.npu.synchronize()
     print("CUSTOM_DONE", flush=True)
-    if not isinstance(expected, torch.Tensor) or not isinstance(actual, torch.Tensor):
-        raise RuntimeError("当前精度脚本要求 reference 和自定义算子均返回单个 Tensor")
-    if actual.shape != expected.shape:
-        raise RuntimeError(f"输出 shape 不一致：actual={actual.shape}, expected={expected.shape}")
+    expected = load_expected()
+    def tensor_outputs(value):
+        if isinstance(value, torch.Tensor):
+            return [value]
+        if isinstance(value, (list, tuple)):
+            result = []
+            for item in value:
+                result.extend(tensor_outputs(item))
+            return result
+        raise RuntimeError(f"输出必须是Tensor或Tensor序列，当前为{type(value).__name__}")
+
+    actual_outputs, expected_outputs = tensor_outputs(actual), tensor_outputs(expected)
+    if len(actual_outputs) != len(expected_outputs):
+        raise RuntimeError(f"输出数量不一致：actual={len(actual_outputs)}, expected={len(expected_outputs)}")
+    for index, (actual_tensor, expected_tensor) in enumerate(zip(actual_outputs, expected_outputs)):
+        if actual_tensor.shape != expected_tensor.shape:
+            raise RuntimeError(
+                f"输出{index} shape不一致：actual={actual_tensor.shape}, expected={expected_tensor.shape}")
 
     print("COMPARE_START", flush=True)
-    diff = (actual.float() - expected.float()).abs()
     print(f"operator={name}")
     print(f"reference={reference_path}")
-    print(f"shape={tuple(actual.shape)}, dtype={actual.dtype}")
-    max_abs = diff.max().item()
-    mean_abs = diff.mean().item()
+    print(f"shapes={[tuple(value.shape) for value in actual_outputs]}, dtypes={[str(value.dtype) for value in actual_outputs]}")
+    # Keep temporary memory bounded for multi-GiB outputs.  A monolithic
+    # assert_close can allocate multiple full-size masks and diffs.
+    compare_chunk = 4 * 1024 * 1024
+    max_abs = 0.0
+    abs_sum = 0.0
+    mismatch_count = 0
+    total_elements = 0
+    for actual_tensor, expected_tensor in zip(actual_outputs, expected_outputs):
+        actual_flat, expected_flat = actual_tensor.reshape(-1), expected_tensor.reshape(-1)
+        total_elements += actual_flat.numel()
+        for start in range(0, actual_flat.numel(), compare_chunk):
+            stop = min(start + compare_chunk, actual_flat.numel())
+            actual_chunk = actual_flat[start:stop].float()
+            expected_chunk = expected_flat[start:stop].float()
+            diff = (actual_chunk - expected_chunk).abs()
+            max_abs = max(max_abs, diff.max().item())
+            abs_sum += diff.sum().item()
+            mismatch_count += (diff > (ATOL + RTOL * expected_chunk.abs())).sum().item()
+    mean_abs = abs_sum / total_elements if total_elements else 0.0
     print(f"max_abs={max_abs:.8f}")
     print(f"mean_abs={mean_abs:.8f}")
-    torch.testing.assert_close(actual, expected, atol=ATOL, rtol=RTOL)
+    if mismatch_count:
+        raise AssertionError(
+            f"精度不通过：{mismatch_count}/{total_elements} 个元素超过 "
+            f"atol={ATOL}, rtol={RTOL}"
+        )
     print("COMPARE_DONE", flush=True)
     result = {
         "operator": name, "status": "PASS", "exit_code": 0,
-        "reference": str(reference_path), "output_shape": list(actual.shape),
-        "output_dtype": str(actual.dtype), "atol": ATOL, "rtol": RTOL,
+        "reference": str(reference_path),
+        "output_shape": (list(actual_outputs[0].shape) if len(actual_outputs) == 1
+                         else [list(value.shape) for value in actual_outputs]),
+        "output_dtype": (str(actual_outputs[0].dtype) if len(actual_outputs) == 1
+                         else [str(value.dtype) for value in actual_outputs]),
+        "atol": ATOL, "rtol": RTOL,
+        "input_metadata": [argument_metadata(parameter, value, torch)
+                           for (parameter, _), value in zip(
+                               extension_parameters(project, extension_function_name(item["function"])),
+                               custom_args)],
+        "init_args": [value if isinstance(value, (str, int, float, bool, type(None)))
+                      else repr(value) for value in init_args],
         "max_abs": max_abs, "mean_abs": mean_abs,
         "source_fingerprint": source_fingerprint(project),
         "completed_at": datetime.now(timezone.utc).isoformat(),
@@ -602,6 +770,7 @@ def precision(name: str, project_dir: str | None = None) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("operator", nargs="?", help="manifest 中的算子工程名")
+    parser.add_argument("--suite", choices=sorted(SUITES), default="KernelBench910B")
     parser.add_argument(
         "--project-dir", help="覆盖 manifest 中的工程目录，用于验证工作区版本"
     )
@@ -613,6 +782,7 @@ def main() -> None:
     )
     parser.add_argument("--internal-run", metavar="OPERATOR", help=argparse.SUPPRESS)
     args = parser.parse_args()
+    configure_suite(args.suite)
 
     if args.internal_run:
         precision(args.internal_run, args.project_dir)
@@ -621,6 +791,19 @@ def main() -> None:
         parser.error("必须提供 OperatorName")
 
     item, project = resolve_operator(args.operator, args.project_dir)
+    failure_stage = "adapter"
+    stage = "adapter_preflight"
+    log_path = project / "precision/adapter_preflight.log"
+    from subgraph_adapters import adapter_available, adapter_required
+    if adapter_required(args.operator) and not adapter_available(args.operator):
+        error = RuntimeError(
+            f"ADAPTER_MISSING: {args.operator} 是融合子图，尚未定义确定的 arguments/expected 适配器"
+        )
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        log_path.write_text(str(error) + "\n", encoding="utf-8")
+        write_failure(project, args.operator, error, failure_stage=failure_stage,
+                      stage=stage, log_path=log_path)
+        raise error
     failure_stage = "build"
     stage = "opp_build"
     log_path = project / "precision/opp_build.log"
@@ -638,9 +821,13 @@ def main() -> None:
             log_path = project / "precision/precision_run.log"
             run_precision_process(args.operator, item, project, log_path)
         except (Exception, SystemExit) as error:
+            recorded_failure_stage = ("environment" if is_environment_error(error, log_path)
+                                      else "build" if is_kernel_entry_error(error, log_path)
+                                      else failure_stage)
+            recorded_stage = "kernel_entry" if recorded_failure_stage == "build" and stage == "precision_run" else stage
             write_failure(
                 project, args.operator, error,
-                failure_stage=failure_stage, stage=stage, log_path=log_path,
+                failure_stage=recorded_failure_stage, stage=recorded_stage, log_path=log_path,
             )
             raise
     finally:

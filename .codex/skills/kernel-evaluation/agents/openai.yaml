@@ -1,4 +1,0 @@
-interface:
-  display_name: "Kernel Evaluation"
-  short_description: "评测策略模型结构输出及 AscendC 算子真实优化收益"
-  default_prompt: "使用 $kernel-evaluation 评测策略模型，并在隔离工作区验证预测策略的精度和性能收益。"

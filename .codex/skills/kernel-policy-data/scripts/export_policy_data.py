@@ -1,264 +1,50 @@
 #!/usr/bin/env python3
-"""Export validated, performance-positive KernelBench policy JSONL."""
+"""Export compact source-to-strategy records filtered by real Task Duration."""
 
 from __future__ import annotations
 
 import argparse
 import hashlib
-import importlib.util
 import json
 import math
+import os
 import re
+import subprocess
 import sys
 from pathlib import Path
-from typing import Any
 
-
+ROOT = Path(__file__).resolve().parents[4]
+sys.path.insert(0, str(ROOT / ".codex"))
+from suite_config import SUITES, load_suite_manifest, suite_paths
 SOURCE_SUFFIXES = {".c", ".cc", ".cpp", ".cxx", ".h", ".hh", ".hpp"}
-VERSION_RE = re.compile(r"^(?P<operator>.+)_(?P<version>[0-3])$")
+VERSION_RE = re.compile(r"^(?P<operator>.+)_(?P<version>[0-4])$")
+TERMINAL_STATES = {
+    "completed_max_rounds", "stopped_no_strategy", "stopped_no_improvement",
+    "build_failed", "precision_failed", "performance_failed", "agent_failed",
+    "implementation_blocked", "prepare_failed", "environment_failed", "stopped_by_user",
+}
+STRATEGY_FIELDS = {"kinds", "evidence", "reasoning", "targets", "changes", "guards"}
+REASONING_LABELS = ["任务", "现状", "问题", "策略", "推导", "边界"]
 
 
-def repo_root() -> Path:
-    return Path(__file__).resolve().parents[4]
-
-
-def skill_root() -> Path:
-    return Path(__file__).resolve().parents[1]
-
-
-def load_json(path: Path) -> dict[str, Any]:
+def load(path: Path) -> dict:
     value = json.loads(path.read_text(encoding="utf-8"))
     if not isinstance(value, dict):
         raise ValueError(f"JSON 顶层不是对象：{path}")
     return value
 
 
-def pretty_json(value: dict[str, Any]) -> str:
-    return json.dumps(value, ensure_ascii=False, indent=2) + "\n"
-
-
-def compact_json(value: dict[str, Any]) -> str:
+def compact(value: object) -> str:
     return json.dumps(value, ensure_ascii=False, separators=(",", ":"))
 
 
-def compact_performance(report: dict[str, Any]) -> dict[str, Any]:
-    """Keep fields needed for diagnosis and source-grounded action planning."""
-    task = report.get("task", {})
-    pipeline = report.get("pipeline", {})
-    memory = report.get("memory", {})
-    l2 = report.get("l2_cache", {})
-    conflict = report.get("resource_conflict", {})
-    hardware = report.get("hardware", {})
-    return {
-        "task": {key: task.get(key) for key in (
-            "Task Type", "Block Num", "Input Shapes", "Input Data Types",
-            "Output Shapes", "Output Data Types", "head_overhead_ratio",
-        )},
-        "pipeline": {key: pipeline.get(key) for key in (
-            "aic_mac_ratio", "aic_scalar_ratio", "aic_mte2_ratio", "aic_fixpipe_ratio",
-            "aiv_vec_ratio", "aiv_scalar_ratio", "aiv_mte2_ratio", "aiv_mte3_ratio",
-            "aic_icache_miss_rate", "aiv_icache_miss_rate",
-        )},
-        "memory": {"gm_peak_utilization_percent": memory.get("gm_peak_utilization_percent")},
-        "l2_cache": {"aiv_derived_hit_rate_percent": l2.get("aiv_derived_hit_rate_percent")},
-        "resource_conflict": {key: conflict.get(key) for key in (
-            "aiv_vec_bankgroup_cflt_ratio", "aiv_vec_bank_cflt_ratio", "aiv_vec_resc_cflt_ratio",
-        )},
-        "per_core": {key: (report.get("per_core") or {}).get(key) for key in (
-            "active_cores", "imbalance_percent",
-        )},
-        "hardware": {key: hardware.get(key) for key in (
-            "aic_core_count", "aiv_core_count", "ub_bytes_per_core", "l1_bytes_per_core",
-            "l0a_bytes_per_core", "l0b_bytes_per_core", "l0c_bytes_per_core", "l2_bytes",
-        )},
-    }
-
-
-def canonical_policy_contract(knowledge: dict[str, Any]) -> dict[str, Any]:
-    """Build the shared prompt contract from canonical bottleneck/strategy sources."""
-    root = repo_root()
-    bottleneck = load_module(
-        "kernel_bottleneck_training_contract",
-        root / ".codex/skills/kernel-bottleneck/scripts/validate_report.py",
-    )
-    strategy = load_module(
-        "kernel_strategy_training_contract",
-        root / ".codex/skills/kernel-strategy/scripts/derive_strategy.py",
-    )
-    slots = load_json(root / ".codex/skills/kernel-strategy/references/operation-slots.json")
-    metric_sources = {key: sources for key, sources in bottleneck.METRIC_SOURCES.items()}
-    cause_rules = [
-        [
-            cause, parent, evidence, strategy.RULES[cause],
-            strategy.OPERATIONS[strategy.RULES[cause]],
-        ]
-        for cause, (parent, evidence) in bottleneck.CAUSES.items()
-    ]
-    operation_slots = [
-        [operation, fields["required"], fields["optional"]]
-        for operation, fields in slots.items()
-    ]
-    return {
-        "decision_order": knowledge["decision_order"],
-        "metric_evidence_sources": metric_sources,
-        "cause_rule_fields": [
-            "cause_key", "bottleneck_key", "required_evidence_key", "strategy_key", "operation",
-        ],
-        "cause_rules": cause_rules,
-        "operation_slot_fields": ["operation", "required", "optional"],
-        "operation_slots": operation_slots,
-        "action_fields": knowledge["action_fields"],
-    }
-
-
-def render_system_prompt(contract: dict[str, Any]) -> str:
-    return "\n".join([
-        "你是 AscendC Kernel 性能策略教师。根据输入中的 OPERATOR、正式 PERF 与完整 HOST/KERNEL 源码，直接找出全部确定的源码问题并生成可实施策略。",
-        "按可消除热路径成本排序，最多输出 3 个互不重复的问题；每个 cause 必须由直接源码证据支持，性能数据只补充影响。",
-        "严格按 cause_rules 完成 cause→strategy→operation 映射；actions 必须满足 operation_slots，最多 6 个，并共享无冲突的任务、tiling、容量、地址、dtype、对齐、tail、同步和 ABI 设计。",
-        "只输出一个 JSON 对象，形状为 {\"strategies\":[{\"bottleneck_key\":string,\"cause_key\":string,\"evidence\":array,\"strategy_key\":string,\"reasoning\":array,\"actions\":array}]}。不要输出 Markdown、候选方案、额外字段或管理元数据。",
-        "契约中的 cause_rules 与 operation_slots 按各自 fields 表头解释。以下 JSON 是唯一固定契约：",
-        compact_json(contract),
-        "",
-    ])
-
-
-def sha256_file(path: Path) -> str:
+def sha(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def load_module(name: str, path: Path) -> Any:
-    spec = importlib.util.spec_from_file_location(name, path)
-    if spec is None or spec.loader is None:
-        raise ValueError(f"无法加载模块：{path}")
-    module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
-    return module
-
-
-def validate_policy_knowledge(knowledge: dict[str, Any]) -> None:
-    root = repo_root()
-    bottleneck = load_module(
-        "kernel_bottleneck_contract",
-        root / ".codex/skills/kernel-bottleneck/scripts/validate_report.py",
-    )
-    strategy = load_module(
-        "kernel_strategy_contract",
-        root / ".codex/skills/kernel-strategy/scripts/derive_strategy.py",
-    )
-    if set(knowledge) != {"decision_order", "action_fields"}:
-        raise ValueError("policy knowledge 只保留 decision_order 和 action_fields")
-    decision_order = knowledge.get("decision_order")
-    if not isinstance(decision_order, list) or not decision_order or any(
-        not isinstance(value, str) or not value.strip() for value in decision_order
-    ):
-        raise ValueError("policy knowledge 的 decision_order 非法")
-    if knowledge.get("action_fields") != ["target", "operation", "edits", "constraints"]:
-        raise ValueError("policy knowledge 的 action_fields 非法")
-    if set(bottleneck.CAUSES) != set(strategy.RULES):
-        raise ValueError("bottleneck cause 与 strategy 映射未完整对齐")
-    if set(strategy.RULES.values()) != set(strategy.OPERATIONS):
-        raise ValueError("strategy 与 operation 映射未完整对齐")
-    slots = load_json(root / ".codex/skills/kernel-strategy/references/operation-slots.json")
-    if set(slots) != set(strategy.OPERATIONS.values()) or any(
-        not isinstance(value, dict) or set(value) != {"required", "optional"}
-        or not isinstance(value["required"], list) or not 2 <= len(value["required"]) <= 4
-        or not isinstance(value["optional"], list)
-        or any(not isinstance(item, str) or not item for item in value["required"] + value["optional"])
-        for value in slots.values()
-    ):
-        raise ValueError("operation slots 未完整覆盖固定 operation")
-
-
-def validate_parent_reports(parent: Path) -> None:
-    root = repo_root()
-    bottleneck_scripts = root / ".codex/skills/kernel-bottleneck/scripts"
-    strategy_scripts = root / ".codex/skills/kernel-strategy/scripts"
-    for directory in (str(bottleneck_scripts), str(strategy_scripts)):
-        if directory not in sys.path:
-            sys.path.insert(0, directory)
-    bottleneck_validator = load_module(
-        "kernel_policy_bottleneck_validator",
-        bottleneck_scripts / "validate_report.py",
-    )
-    strategy_validator = load_module(
-        "kernel_policy_strategy_validator",
-        strategy_scripts / "validate_strategy.py",
-    )
-    bottleneck_path = parent / "bottleneck/bottleneck.json"
-    strategy_path = parent / "strategy/strategy.json"
-    bottleneck_validator.validate(bottleneck_path)
-    strategy_validator.validate(bottleneck_path, strategy_path)
-
-
-def validate_completed_version(
-    project: Path, label: str, operator: str, version: int
-) -> dict[str, Any]:
-    workspace = load_json(project / "workspace.json")
-    precision = load_json(project / "precision/precision.json")
-    fingerprint = source_fingerprint(project)
-    if workspace.get("operator") != operator or workspace.get("version") != version:
-        raise ValueError(f"{label} workspace 算子或版本身份不匹配")
-    if workspace.get("status") != "PERFORMANCE_DONE":
-        raise ValueError(f"{label} workspace 不是 PERFORMANCE_DONE")
-    if workspace.get("source_fingerprint") != fingerprint:
-        raise ValueError(f"{label} workspace 源码指纹不匹配")
-    if precision.get("status") != "PASS" or precision.get("exit_code") != 0:
-        raise ValueError(f"{label} precision 未 PASS")
-    if precision.get("operator") != operator:
-        raise ValueError(f"{label} precision 算子身份不匹配")
-    if precision.get("source_fingerprint") != fingerprint:
-        raise ValueError(f"{label} precision 源码指纹不匹配")
-    return workspace
-
-
-def source_file_bytes(project: Path) -> dict[str, bytes]:
-    return {
-        path.relative_to(project).as_posix(): path.read_bytes()
-        for folder in ("op_host", "op_kernel")
-        for path in (project / folder).rglob("*") if path.is_file()
-    }
-
-
-def validate_implementation_link(parent: Path, parent_strategy: dict[str, Any], child: Path) -> None:
-    implementation = load_json(child / "strategy/implementation.json")
-    strategies = parent_strategy.get("strategies")
-    if not isinstance(strategies, list) or not strategies:
-        raise ValueError("父版本 strategies 为空")
-    strategy_keys = [item.get("strategy_key") for item in strategies]
-    if implementation.get("strategy_keys") != strategy_keys:
-        raise ValueError("子版本 implementation.strategy_keys 与父版本策略不一致")
-    strategy_actions = [action for item in strategies for action in item.get("actions", [])]
-    modified = implementation.get("modified_files")
-    if not isinstance(modified, list) or not modified:
-        raise ValueError("子版本 implementation 缺少 modified_files")
-    target_files = {action["target"].split("::", 1)[0] for action in strategy_actions}
-    parent_files = source_file_bytes(parent)
-    child_files = source_file_bytes(child)
-    actual_modified = {
-        path for path in set(parent_files) | set(child_files)
-        if parent_files.get(path) != child_files.get(path)
-    }
-    if set(modified) != actual_modified:
-        raise ValueError("implementation.modified_files 与父子源码真实 diff 不一致")
-    if target_files != actual_modified:
-        raise ValueError("真实源码 diff 必须恰好覆盖全部 action target，且不得混入未声明文件")
-    actions = implementation.get("actions")
-    expected_indices = list(range(1, len(strategy_actions) + 1))
-    if not isinstance(actions, list) or [item.get("action_index") for item in actions if isinstance(item, dict)] != expected_indices:
-        raise ValueError("implementation.actions 未按 action_index 完整关联父策略")
-
-
-def source_fingerprint(project: Path) -> str:
+def fingerprint(project: Path) -> str:
     digest = hashlib.sha256()
-    files = sorted(
-        path
-        for folder in ("op_host", "op_kernel")
-        for path in (project / folder).rglob("*")
-        if path.is_file()
-    )
-    if not files:
-        raise ValueError("op_host/op_kernel 中没有文件")
+    files = sorted(path for folder in ("op_host", "op_kernel") for path in (project / folder).rglob("*") if path.is_file())
     for path in files:
         digest.update(path.relative_to(project).as_posix().encode())
         digest.update(b"\0")
@@ -266,233 +52,281 @@ def source_fingerprint(project: Path) -> str:
     return digest.hexdigest()
 
 
-def render_sources(project: Path, folder: str) -> str:
-    paths = sorted(
-        path for path in (project / folder).rglob("*")
-        if path.is_file() and path.suffix.lower() in SOURCE_SUFFIXES
-    )
-    if not paths:
-        raise ValueError(f"{folder} 中没有可导出的源码")
-    chunks = []
-    for path in paths:
-        relative = path.relative_to(project).as_posix()
-        text = path.read_text(encoding="utf-8", errors="replace").rstrip()
-        chunks.append(f"--- FILE: {relative} ---\n{text}")
-    return "\n\n".join(chunks)
+def valid_precision(project: Path) -> bool:
+    value = load(project / "precision/precision.json")
+    return value.get("status") == "PASS" and value.get("exit_code") == 0 and value.get("source_fingerprint") == fingerprint(project)
 
 
-def latency(performance: dict[str, Any]) -> float:
-    report_value = performance.get("kernel_latency_us")
-    if not isinstance(report_value, (int, float)) or not math.isfinite(report_value) or report_value <= 0:
-        raise ValueError("performance kernel_latency_us 不是有限正数")
-    return float(report_value)
+def latency(project: Path) -> float:
+    path = project / "performance/latency.json"
+    value = load(path)
+    number = value.get("task_duration_us")
+    if value.get("source_fingerprint") != fingerprint(project):
+        raise ValueError(f"Task Duration源码指纹失效：{path}")
+    if value.get("accepted") is not True:
+        raise ValueError(f"Task Duration未通过收益门禁：{path}")
+    if not isinstance(number, (int, float)) or not math.isfinite(number) or number <= 0:
+        raise ValueError(f"无有效 Task Duration：{path}")
+    return float(number)
 
 
-def operator_json(operator: str, entry: dict[str, Any]) -> dict[str, Any]:
-    return {
-        "operator": operator,
-        "level": entry.get("level"),
-        "function": entry.get("function"),
-        "parameters": entry.get("parameters"),
-    }
-
-
-def merge_policy(bottleneck: dict[str, Any], strategy: dict[str, Any]) -> dict[str, Any]:
-    issues = bottleneck.get("issues")
-    strategies = strategy.get("strategies")
-    bottleneck_reasoning = bottleneck.get("reasoning")
-    strategy_reasoning = strategy.get("reasoning")
-    if not all(isinstance(value, list) for value in (
-        issues, strategies, bottleneck_reasoning, strategy_reasoning,
-    )) or not (len(issues) == len(strategies) == len(bottleneck_reasoning) == len(strategy_reasoning)):
-        raise ValueError("bottleneck/strategy 条目与 reasoning 无法一一合并")
-    merged = []
-    for index, (issue, planned) in enumerate(zip(issues, strategies)):
-        cause_key = issue.get("bottleneck", {}).get("cause_key")
-        if cause_key != planned.get("cause_key"):
-            raise ValueError(f"第 {index + 1} 项 cause_key 未对齐")
-        merged.append({
-            "bottleneck_key": issue["bottleneck"]["bottleneck_key"],
-            "cause_key": cause_key,
-            "evidence": issue["evidence"],
-            "strategy_key": planned["strategy_key"],
-            "reasoning": [bottleneck_reasoning[index], strategy_reasoning[index]],
-            "actions": planned["actions"],
-        })
-    return {"strategies": merged}
-
-
-def evaluate_candidate(
-    parent: Path,
-    manifest: dict[str, Any],
-    system_prompt: str,
-    min_reduction: float,
-) -> tuple[dict[str, str] | None, dict[str, Any]]:
+def best_before(parent: Path) -> float:
     match = VERSION_RE.fullmatch(parent.name)
     if match is None:
-        raise ValueError("目录名不是可导出的 <OperatorName>_[0-3]")
-    operator = match.group("operator")
-    version = int(match.group("version"))
-    child = parent.with_name(f"{operator}_{version + 1}")
-    audit: dict[str, Any] = {"ops": parent.name, "child_ops": child.name, "eligible": False}
-    if operator not in manifest:
-        raise ValueError(f"manifest 中不存在算子 {operator}")
-    if not child.is_dir():
-        raise ValueError("对应子版本不存在")
-
-    parent_workspace = validate_completed_version(parent, "父版本", operator, version)
-    child_workspace = validate_completed_version(child, "子版本", operator, version + 1)
-    if child_workspace.get("parent_version") != version:
-        raise ValueError("子版本 parent_version 未指向紧邻父版本")
-    if child_workspace.get("source_project") != parent_workspace.get("source_project"):
-        raise ValueError("父子版本 source_project 不一致")
-    if child_workspace.get("vendor") != parent_workspace.get("vendor"):
-        raise ValueError("父子版本 vendor 不一致")
-
-    parent_perf = load_json(parent / "performance/performance.json")
-    child_perf = load_json(child / "performance/performance.json")
-    if parent_perf.get("operator") != operator or child_perf.get("operator") != operator:
-        raise ValueError("父子版本 performance 算子身份不匹配")
-    parent_latency = latency(parent_perf)
-    child_latency = latency(child_perf)
-    reduction = (parent_latency - child_latency) / parent_latency * 100.0
-    audit.update({
-        "parent_latency_us": parent_latency,
-        "child_latency_us": child_latency,
-        "reduction_percent": reduction,
-        "threshold_percent": min_reduction,
-    })
-
-    bottleneck = load_json(parent / "bottleneck/bottleneck.json")
-    strategy = load_json(parent / "strategy/strategy.json")
-    if not bottleneck.get("issues") or not strategy.get("strategies"):
-        raise ValueError("父版本 bottleneck 或 strategy 为空")
-    validate_parent_reports(parent)
-    validate_implementation_link(parent, strategy, child)
-    if not reduction > min_reduction:
-        audit["exclusion_reason"] = f"latency 下降 {reduction:.12g}% 未严格大于 {min_reduction}%"
-        return None, audit
-
-    input_text = "\n\n".join([
-        "[OPERATOR]\n" + compact_json(operator_json(operator, manifest[operator])),
-        "[PERF]\n" + compact_json(compact_performance(parent_perf)),
-        "[HOST]\n" + render_sources(parent, "op_host"),
-        "[KERNEL]\n" + render_sources(parent, "op_kernel"),
-    ])
-    output_text = compact_json(merge_policy(bottleneck, strategy))
-    sample = {
-        "system_prompt": system_prompt,
-        "input": input_text,
-        "output": output_text,
-        "ops": parent.name,
-    }
-    audit.update({
-        "eligible": True,
-        "input_chars": len(input_text),
-        "output_chars": len(output_text),
-    })
-    return sample, audit
+        raise ValueError("父版本名非法")
+    operator, version = match.group("operator"), int(match.group("version"))
+    values = [latency(parent.parent / f"{operator}_{index}") for index in range(version + 1)]
+    return min(values)
 
 
-def discover(root: Path, requested_ops: set[str], levels: set[str]) -> list[Path]:
-    projects = [
-        path for path in root.glob("level*/*")
-        if path.is_dir() and VERSION_RE.fullmatch(path.name)
-        and (not levels or path.parent.name in levels)
+def strip_comments(text: str) -> str:
+    text = re.sub(r"\A\s*/\*.*?\*/\s*", "", text, count=1, flags=re.S)
+    text = re.sub(r"(?m)^\s*//[^\n]*\n", "", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def sources(project: Path, folder: str) -> str:
+    paths = sorted(path for path in (project / folder).rglob("*") if path.is_file() and path.suffix.lower() in SOURCE_SUFFIXES)
+    if not paths:
+        raise ValueError(f"{folder} 没有源码")
+    return "\n\n".join(
+        f"--- FILE: {path.relative_to(project).as_posix()} ---\n{strip_comments(path.read_text(encoding='utf-8', errors='replace'))}"
+        for path in paths
+    )
+
+
+def validate_pair(parent: Path, child: Path) -> None:
+    commands = [
+        [sys.executable, str(ROOT / ".codex/skills/kernel-strategy/scripts/validate_planning.py"), "--planning", str(parent / "strategy/planning.json"), "--project-dir", str(parent)],
+        [sys.executable, str(ROOT / ".codex/skills/kernel-strategy/scripts/validate_strategy.py"), "--strategy", str(parent / "strategy/strategy.json"), "--project-dir", str(parent)],
+        [sys.executable, str(ROOT / ".codex/skills/kernel-implementation/scripts/validate_implementation.py"), "--strategy", str(parent / "strategy/strategy.json"), "--implementation", str(child / "strategy/implementation.json"), "--parent", str(parent), "--project-dir", str(child), "--require-attempts"],
     ]
-    if requested_ops:
-        projects = [path for path in projects if path.name in requested_ops]
-        missing = requested_ops - {path.name for path in projects}
-        if missing:
-            raise SystemExit("未找到 ops：" + ", ".join(sorted(missing)))
-    return sorted(projects, key=lambda path: (path.parent.name, path.name))
+    for command in commands:
+        result = subprocess.run(command, cwd=ROOT, text=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
+        if result.returncode:
+            raise ValueError(result.stdout.strip()[-800:])
 
 
-def parse_args() -> argparse.Namespace:
-    root = repo_root()
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--workspace-root", type=Path, default=root / "kernel_workspace/KernelBench910B")
-    parser.add_argument("--manifest", type=Path, default=root / "kernel/KernelBench910B/manifest.json")
-    parser.add_argument("--output", type=Path, default=root / "datasets/kernel_policy_data.jsonl")
-    parser.add_argument("--system-prompt", type=Path)
-    parser.add_argument("--ops", action="append", default=[])
-    parser.add_argument(
-        "--level", action="append", choices=("level1", "level2", "level3"), default=[],
-        help="仅导出指定 level；可重复传入",
-    )
-    parser.add_argument("--min-reduction-percent", type=float, default=1.0)
-    return parser.parse_args()
+def system_prompt() -> str:
+    return "\n".join([
+        "你是AscendC源码优化策略教师。仅根据OP和完整HOST/KERNEL源码，找出全部有直接证据且可确定修复的问题，生成直达目标、可编译、语义闭合且覆盖全部问题的统一策略。训练样本只包含已有验证收益的非空策略。",
+        "先识别计算模式、独立输出、数学主体和跨tile状态，再由shape、容量、字段范围与任务数确定唯一布局。成本按GM字节、DMA burst、Vector repeat、Cube运算、Scalar迭代、task生命周期、状态初始化、同步和写回burst计算；非空方案须减少静态工作，或在每输出工作不增加时提高有效核覆盖。完整Vector化且一次读写的Elementwise只改tile或Queue时不生成策略。",
+        "kinds只记直接变化并去重：GM总字节减少=reuse_onchip；仅GM事务减少=batch_transfer；改变Scalar/Vector数学表达=vectorize；调整已有Cube主路径=cube；只改单任务工作量=resize_tile；改变核间所有权=parallelize；只改阶段依赖或重叠=pipeline。配套变化不另记；cube仅限源码已有Matmul/Mmad/IterateAll主计算，禁止将Scalar/Vector contraction转换为Cube。",
+        "Cube由M/N/K推导输出tile和blockIdx，禁止只增大SetDim/SetBlockDim；记录A/B重载、K chunk、转换和tail。pipeline区分双槽Vector/MTE与IterateAll/End边界。",
+        "evidence使用‘文件::symbol | 源码事实 | shape/循环/字节/任务公式’；targets覆盖修改位置；changes使用‘target | 当前结构 -> 目标结构’；guards记录不变量。",
+        "reasoning固定六条：[任务]语义、[现状]数据流、[问题]结构与公式、[策略]目标结构、[推导]参数与资源公式、[边界]不变量。同一kind使用相同术语和句式；多kind按顺序以分号一一对应。",
+        "只输出单行紧凑JSON：{\"strategy\":{\"kinds\":[],\"evidence\":[],\"reasoning\":[],\"targets\":[],\"changes\":[],\"guards\":[]}}。changes按依赖顺序表达直达目标结构的修改；文本须单行、明确、无Markdown，不输出性能信息或额外字段。",
+    ])
 
 
-def main() -> int:
-    args = parse_args()
-    if not math.isfinite(args.min_reduction_percent) or args.min_reduction_percent < 1.0:
-        raise SystemExit("--min-reduction-percent 必须是大于等于 1.0 的有限数")
-    workspace_root = args.workspace_root.resolve()
-    manifest = load_json(args.manifest.resolve())
-    knowledge = load_json(skill_root() / "references/policy-knowledge.json")
-    validate_policy_knowledge(knowledge)
-    contract = canonical_policy_contract(knowledge)
-    system_prompt = render_system_prompt(contract)
-    projects = discover(workspace_root, set(args.ops), set(args.level))
-    samples: list[dict[str, str]] = []
-    audit_items: list[dict[str, Any]] = []
+def discover_parents(workspace_root: Path, requested: set[str]) -> list[Path]:
+    return sorted(path for path in workspace_root.glob("*")
+                  if path.is_dir() and VERSION_RE.fullmatch(path.name)
+                  and (not requested or path.name in requested))
 
-    for project in projects:
-        try:
-            sample, audit = evaluate_candidate(
-                project, manifest, system_prompt,
-                min_reduction=args.min_reduction_percent,
-            )
-            audit_items.append(audit)
-            if sample is None:
-                continue
-            samples.append(sample)
-        except Exception as error:
-            audit_items.append({
-                "ops": project.name,
-                "eligible": False,
-                "exclusion_reason": str(error),
-            })
 
-    if len({sample["ops"] for sample in samples}) != len(samples):
-        raise ValueError("导出结果包含重复 ops")
-    output = args.output.resolve()
-    output.parent.mkdir(parents=True, exist_ok=True)
-    system_prompt_path = (
-        args.system_prompt.resolve() if args.system_prompt
-        else output.parent / "kernel_policy_system_prompt.txt"
-    )
-    system_prompt_path.parent.mkdir(parents=True, exist_ok=True)
-    system_prompt_path.write_text(system_prompt, encoding="utf-8")
-    with output.open("w", encoding="utf-8") as handle:
-        for sample in samples:
-            handle.write(json.dumps(sample, ensure_ascii=False) + "\n")
-    audit_path = output.with_suffix(output.suffix + ".audit.json")
-    root = repo_root()
-    audit_report = {
-        "workspace_root": str(workspace_root),
-        "output": str(output),
-        "system_prompt": str(system_prompt_path),
-        "dataset_sha256": sha256_file(output),
-        "system_prompt_sha256": sha256_file(system_prompt_path),
-        "canonical_sources_sha256": {
-            "cause_taxonomy": sha256_file(root / ".codex/skills/kernel-bottleneck/references/cause-taxonomy.json"),
-            "cause_strategy_mapping": sha256_file(root / ".codex/skills/kernel-strategy/scripts/derive_strategy.py"),
-            "operation_slots": sha256_file(root / ".codex/skills/kernel-strategy/references/operation-slots.json"),
-        },
-        "minimum_reduction_percent_exclusive": args.min_reduction_percent,
-        "candidates": len(projects),
-        "exported": len(samples),
-        "excluded": len(projects) - len(samples),
-        "items": audit_items,
+def queue_states(queue_path: Path) -> dict[str, str] | None:
+    """Return managed operator states, or None when no managed queue exists."""
+    if not queue_path.is_file():
+        return None
+    queue = load(queue_path)
+    items = queue.get("items")
+    if not isinstance(items, list):
+        raise ValueError(f"队列缺少items：{queue_path}")
+    return {
+        item["operator"]: item["state"] for item in items
+        if isinstance(item, dict)
+        and isinstance(item.get("operator"), str)
+        and isinstance(item.get("state"), str)
     }
-    audit_path.write_text(pretty_json(audit_report), encoding="utf-8")
-    print(f"exported={len(samples)} excluded={len(projects) - len(samples)} output={output}")
-    print(f"system_prompt={system_prompt_path}")
-    print(f"audit={audit_path}")
-    return 0
+
+
+def input_text(operator: str, project: Path, entry: dict) -> str:
+    precision = load(project / "precision/precision.json")
+    return "\n\n".join([
+        "[OP]\n" + compact({"operator": operator, "function": entry.get("function"),
+                             "parameters": entry.get("parameters"),
+                             "output_shape": precision.get("output_shape"),
+                             "output_dtype": precision.get("output_dtype")}),
+        "[HOST]\n" + sources(project, "op_host"),
+        "[KERNEL]\n" + sources(project, "op_kernel"),
+    ])
+
+
+def evaluate_transition(parent: Path, manifest: dict, threshold: float) -> tuple[dict | None, dict]:
+    match = VERSION_RE.fullmatch(parent.name)
+    operator, version = match.group("operator"), int(match.group("version"))
+    child = parent.with_name(f"{operator}_{version + 1}")
+    audit = {"ops": parent.name, "child_ops": child.name, "eligible": False}
+    if operator not in manifest or not child.is_dir():
+        raise ValueError("manifest或child缺失")
+    if not valid_precision(parent) or not valid_precision(child):
+        raise ValueError("父子精度门禁无效")
+    validate_pair(parent, child)
+    before, after = best_before(parent), latency(child)
+    reduction = (before - after) / before * 100.0
+    audit.update({"best_parent_task_duration_us": before, "child_task_duration_us": after, "reduction_percent": reduction, "threshold_percent": threshold})
+    if reduction <= threshold:
+        audit["exclusion_reason"] = "Task Duration收益未严格超过阈值"
+        return None, audit
+    entry = manifest[operator]
+    source_input = input_text(operator, parent, entry)
+    strategy = load(parent / "strategy/strategy.json").get("strategy")
+    if not isinstance(strategy, dict):
+        raise ValueError("父版本没有可导出的非空strategy")
+    audit.update({"eligible": True, "input_chars": len(source_input)})
+    return {"input": source_input, "strategy": strategy}, audit
+
+
+def terminal_null_project(operator: str, workspace_root: Path) -> str | None:
+    versions = sorted(
+        path for path in workspace_root.glob(f"{operator}_[0-4]")
+        if path.is_dir() and VERSION_RE.fullmatch(path.name)
+    )
+    for project in reversed(versions):
+        try:
+            strategy = load(project / "strategy/strategy.json").get("strategy")
+            if strategy is not None or not valid_precision(project):
+                continue
+            latency(project)
+            return project.name
+        except (OSError, json.JSONDecodeError, ValueError, KeyError):
+            continue
+    return None
+
+
+def atomic_write(path: Path, text: str) -> None:
+    temporary = path.with_name(f".{path.name}.{os.getpid()}.tmp")
+    temporary.write_text(text, encoding="utf-8")
+    temporary.replace(path)
+
+
+def load_terminal_policy(parent: Path, final_child_ops: str) -> dict | None:
+    """Load an independently normalized initial-to-final policy when present.
+
+    Raw per-round strategies are deliberately never composed here: their
+    evidence and current-state reasoning belong to different source versions.
+    """
+    path = parent / "strategy/terminal_policy.json"
+    if not path.is_file():
+        return None
+    value = load(path)
+    final = parent.with_name(final_child_ops)
+    if value.get("source_ops") != parent.name:
+        raise ValueError(f"终态策略起始版本失效：{path}")
+    if value.get("final_child_ops") != final_child_ops:
+        raise ValueError(f"终态策略目标版本失效：{path}")
+    if value.get("source_fingerprint") != fingerprint(parent):
+        raise ValueError(f"终态策略起始源码指纹失效：{path}")
+    if not final.is_dir() or value.get("final_source_fingerprint") != fingerprint(final):
+        raise ValueError(f"终态策略最终源码指纹失效：{path}")
+    strategy = value.get("strategy")
+    if not isinstance(strategy, dict) or set(strategy) != STRATEGY_FIELDS:
+        raise ValueError(f"终态策略字段不完整：{path}")
+    if any(not isinstance(strategy[field], list) for field in STRATEGY_FIELDS):
+        raise ValueError(f"终态策略字段必须为数组：{path}")
+    labels = [re.match(r"^\[([^]]+)\]", line).group(1)
+              if isinstance(line, str) and re.match(r"^\[([^]]+)\]", line) else None
+              for line in strategy["reasoning"]]
+    if labels != REASONING_LABELS:
+        raise ValueError(f"终态策略必须重新生成规范六段reasoning：{path}")
+    if len(compact({"strategy": strategy})) > 6000:
+        raise ValueError(f"终态策略超过6000字符：{path}")
+    return strategy
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--suite", choices=sorted(SUITES), default="KernelBench910B")
+    parser.add_argument("--workspace-root", type=Path)
+    parser.add_argument("--manifest", type=Path, help="仅用于兼容自定义 keyed manifest")
+    parser.add_argument("--output", type=Path, default=ROOT / "datasets/kernel_policy_data.jsonl")
+    parser.add_argument("--queue", type=Path)
+    parser.add_argument("--min-reduction", type=float, default=1.0)
+    parser.add_argument("--ops", action="append", default=[])
+    args = parser.parse_args()
+    _, default_workspace, _ = suite_paths(ROOT, args.suite)
+    args.workspace_root = args.workspace_root or default_workspace
+    args.queue = args.queue or (args.workspace_root / "optimization_queue.json")
+    manifest = load(args.manifest) if args.manifest else load_suite_manifest(ROOT, args.suite)
+    prompt = system_prompt()
+    requested = set(args.ops)
+    managed_states = queue_states(args.queue)
+    parents = discover_parents(args.workspace_root, set())
+    transitions, audits = {}, []
+    for parent in parents:
+        try:
+            transition, audit = evaluate_transition(parent, manifest, args.min_reduction)
+            if transition:
+                match = VERSION_RE.fullmatch(parent.name)
+                transitions[(match.group("operator"), int(match.group("version")))] = transition
+            audits.append(audit)
+        except (OSError, json.JSONDecodeError, ValueError) as error:
+            audits.append({"ops": parent.name, "eligible": False, "exclusion_reason": str(error)})
+    records, seen = [], set()
+    for (operator, version), transition in sorted(transitions.items()):
+        # Operators absent from the current targeted queue are durable history.
+        # Operators managed by this queue become stable only at a terminal state.
+        if (managed_states is not None and operator in managed_states
+                and managed_states[operator] not in TERMINAL_STATES):
+            continue
+        if requested and f"{operator}_{version}" not in requested:
+            continue
+        cursor = version
+        while (operator, cursor) in transitions:
+            cursor += 1
+        chain_length = cursor - version
+        strategy = transition["strategy"]
+        composition_mode = "single_step"
+        if chain_length > 1:
+            normalized = load_terminal_policy(
+                args.workspace_root / f"{operator}_{version}", f"{operator}_{cursor}"
+            )
+            if normalized is not None:
+                strategy = normalized
+                composition_mode = "terminal_normalized"
+            else:
+                # A verified immediate transition is safer training data than
+                # a mechanically concatenated answer with cross-version facts.
+                cursor = version + 1
+                composition_mode = "single_step_fallback"
+        output_text = compact({"strategy": strategy})
+        ops = f"{operator}_{version}" if args.suite == "KernelBench910B" else f"{args.suite}/{operator}_{version}"
+        record = {"system_prompt": prompt, "input": transition["input"],
+                  "output": output_text, "ops": ops}
+        identity = hashlib.sha256((record["input"] + "\0" + output_text).encode()).hexdigest()
+        if identity not in seen:
+            seen.add(identity)
+            records.append(record)
+        for audit in audits:
+            if audit.get("ops") == f"{operator}_{version}" and audit.get("eligible"):
+                audit.update(source_strategies=(chain_length if composition_mode == "terminal_normalized" else 1),
+                             available_chain_steps=chain_length,
+                             composition_mode=composition_mode,
+                             final_child_ops=f"{operator}_{cursor}", output_chars=len(output_text))
+                break
+    operators = sorted({match.group("operator") for path in parents
+                        if (match := VERSION_RE.fullmatch(path.name))})
+    excluded_strategy_null = []
+    for operator in operators:
+        if managed_states is not None and operator in managed_states:
+            if managed_states[operator] != "stopped_no_strategy":
+                continue
+        project_name = terminal_null_project(operator, args.workspace_root)
+        if project_name is not None:
+            excluded_strategy_null.append(project_name)
+    args.output.parent.mkdir(parents=True, exist_ok=True)
+    atomic_write(args.output, "".join(compact(record) + "\n" for record in records))
+    prompt_path = args.output.parent / "kernel_policy_system_prompt.txt"
+    atomic_write(prompt_path, prompt)
+    audit_path = args.output.with_suffix(args.output.suffix + ".audit.json")
+    atomic_write(audit_path, json.dumps({"records": len(records),
+                                         "excluded_strategy_null": excluded_strategy_null,
+                                         "system_prompt_chars": len(prompt),
+                                         "system_prompt_sha256": sha(prompt_path),
+                                         "items": audits}, ensure_ascii=False, indent=2) + "\n")
+    print(f"records={len(records)} output={args.output.resolve()}")
 
 
 if __name__ == "__main__":
-    raise SystemExit(main())
+    main()

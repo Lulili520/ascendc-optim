@@ -1,0 +1,333 @@
+{
+  "records": 14,
+  "excluded_strategy_null": [
+    "MhcBlockBottleneck2dCustom_2",
+    "MhcPreBlockCustom_2",
+    "StreamMixCustom_2",
+    "StreamWriteCustom_2"
+  ],
+  "system_prompt_chars": 1047,
+  "system_prompt_sha256": "41337ed09db301203995c9411134ce3d15c9ff4b6827d6c6d94e8f8c3924ca92",
+  "items": [
+    {
+      "ops": "FusedMhcKernelsCustom_0",
+      "child_ops": "FusedMhcKernelsCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 22582.243,
+      "child_task_duration_us": 1737.789,
+      "reduction_percent": 92.30462182166758,
+      "threshold_percent": 1.0,
+      "input_chars": 24140,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "FusedMhcKernelsCustom_1",
+      "output_chars": 2589
+    },
+    {
+      "ops": "FusedMhcKernelsCustom_1",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/FusedMhcKernelsCustom_2/performance/latency.json"
+    },
+    {
+      "ops": "FusedMhcKernelsCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "MhcBlock2dCustom_0",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/MhcBlock2dCustom_1/performance/latency.json"
+    },
+    {
+      "ops": "MhcBlock2dCustom_1",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "MhcBlockBottleneck2dCustom_0",
+      "child_ops": "MhcBlockBottleneck2dCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 123.485,
+      "child_task_duration_us": 87.243,
+      "reduction_percent": 29.34931368182371,
+      "threshold_percent": 1.0,
+      "input_chars": 15326,
+      "source_strategies": 1,
+      "available_chain_steps": 2,
+      "composition_mode": "single_step_fallback",
+      "final_child_ops": "MhcBlockBottleneck2dCustom_1",
+      "output_chars": 2352
+    },
+    {
+      "ops": "MhcBlockBottleneck2dCustom_1",
+      "child_ops": "MhcBlockBottleneck2dCustom_2",
+      "eligible": true,
+      "best_parent_task_duration_us": 87.243,
+      "child_task_duration_us": 52.002,
+      "reduction_percent": 40.39407173068326,
+      "threshold_percent": 1.0,
+      "input_chars": 17031,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "MhcBlockBottleneck2dCustom_2",
+      "output_chars": 2930
+    },
+    {
+      "ops": "MhcBlockBottleneck2dCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "MhcPostBlockCustom_0",
+      "child_ops": "MhcPostBlockCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 306.932,
+      "child_task_duration_us": 142.546,
+      "reduction_percent": 53.55779130230801,
+      "threshold_percent": 1.0,
+      "input_chars": 13821,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "MhcPostBlockCustom_1",
+      "output_chars": 2979
+    },
+    {
+      "ops": "MhcPostBlockCustom_1",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/MhcPostBlockCustom_2/performance/latency.json"
+    },
+    {
+      "ops": "MhcPostBlockCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "MhcPreBlockCustom_0",
+      "child_ops": "MhcPreBlockCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 117212.766,
+      "child_task_duration_us": 961.998,
+      "reduction_percent": 99.17927199158494,
+      "threshold_percent": 1.0,
+      "input_chars": 23510,
+      "source_strategies": 1,
+      "available_chain_steps": 2,
+      "composition_mode": "single_step_fallback",
+      "final_child_ops": "MhcPreBlockCustom_1",
+      "output_chars": 3580
+    },
+    {
+      "ops": "MhcPreBlockCustom_1",
+      "child_ops": "MhcPreBlockCustom_2",
+      "eligible": true,
+      "best_parent_task_duration_us": 961.998,
+      "child_task_duration_us": 860.275,
+      "reduction_percent": 10.574138407772164,
+      "threshold_percent": 1.0,
+      "input_chars": 22347,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "MhcPreBlockCustom_2",
+      "output_chars": 2802
+    },
+    {
+      "ops": "MhcPreBlockCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "MhcProjectorCustom_0",
+      "child_ops": "MhcProjectorCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 3922.077,
+      "child_task_duration_us": 2704.808,
+      "reduction_percent": 31.03633610456909,
+      "threshold_percent": 1.0,
+      "input_chars": 29778,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "MhcProjectorCustom_1",
+      "output_chars": 2789
+    },
+    {
+      "ops": "MhcProjectorCustom_1",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/MhcProjectorCustom_2/performance/latency.json"
+    },
+    {
+      "ops": "MhcProjectorCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "MhcUpdateCustom_0",
+      "child_ops": "MhcUpdateCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 35.062,
+      "child_task_duration_us": 30.901,
+      "reduction_percent": 11.867548913353483,
+      "threshold_percent": 1.0,
+      "input_chars": 17417,
+      "source_strategies": 1,
+      "available_chain_steps": 2,
+      "composition_mode": "single_step_fallback",
+      "final_child_ops": "MhcUpdateCustom_1",
+      "output_chars": 2367
+    },
+    {
+      "ops": "MhcUpdateCustom_1",
+      "child_ops": "MhcUpdateCustom_2",
+      "eligible": true,
+      "best_parent_task_duration_us": 30.901,
+      "child_task_duration_us": 27.681,
+      "reduction_percent": 10.420374745153875,
+      "threshold_percent": 1.0,
+      "input_chars": 16526,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "MhcUpdateCustom_2",
+      "output_chars": 1951
+    },
+    {
+      "ops": "MhcUpdateCustom_2",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/MhcUpdateCustom_3/performance/latency.json"
+    },
+    {
+      "ops": "MhcUpdateCustom_3",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "OrthostochasticProjectCustom_0",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/OrthostochasticProjectCustom_1/performance/latency.json"
+    },
+    {
+      "ops": "OrthostochasticProjectCustom_1",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "SinkhornKnoppCustom_0",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/SinkhornKnoppCustom_1/performance/latency.json"
+    },
+    {
+      "ops": "SinkhornKnoppCustom_1",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "StaticMhcHyperConnectionsCustom_0",
+      "child_ops": "StaticMhcHyperConnectionsCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 2090.003,
+      "child_task_duration_us": 115.164,
+      "reduction_percent": 94.48976867497319,
+      "threshold_percent": 1.0,
+      "input_chars": 20826,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "StaticMhcHyperConnectionsCustom_1",
+      "output_chars": 4650
+    },
+    {
+      "ops": "StaticMhcHyperConnectionsCustom_1",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/StaticMhcHyperConnectionsCustom_2/performance/latency.json"
+    },
+    {
+      "ops": "StaticMhcHyperConnectionsCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "StreamMixCustom_0",
+      "child_ops": "StreamMixCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 30.341,
+      "child_task_duration_us": 26.461,
+      "reduction_percent": 12.787976665238466,
+      "threshold_percent": 1.0,
+      "input_chars": 12264,
+      "source_strategies": 1,
+      "available_chain_steps": 2,
+      "composition_mode": "single_step_fallback",
+      "final_child_ops": "StreamMixCustom_1",
+      "output_chars": 1502
+    },
+    {
+      "ops": "StreamMixCustom_1",
+      "child_ops": "StreamMixCustom_2",
+      "eligible": true,
+      "best_parent_task_duration_us": 26.461,
+      "child_task_duration_us": 22.981,
+      "reduction_percent": 13.151430407014086,
+      "threshold_percent": 1.0,
+      "input_chars": 12264,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "StreamMixCustom_2",
+      "output_chars": 2367
+    },
+    {
+      "ops": "StreamMixCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "StreamWeightedSumCustom_0",
+      "eligible": false,
+      "exclusion_reason": "Task Duration未通过收益门禁：/data/lu/ascendc-optim/kernel_workspace/MHC910B/StreamWeightedSumCustom_1/performance/latency.json"
+    },
+    {
+      "ops": "StreamWeightedSumCustom_1",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    },
+    {
+      "ops": "StreamWriteCustom_0",
+      "child_ops": "StreamWriteCustom_1",
+      "eligible": true,
+      "best_parent_task_duration_us": 31.461,
+      "child_task_duration_us": 25.021,
+      "reduction_percent": 20.46978799148151,
+      "threshold_percent": 1.0,
+      "input_chars": 9504,
+      "source_strategies": 1,
+      "available_chain_steps": 2,
+      "composition_mode": "single_step_fallback",
+      "final_child_ops": "StreamWriteCustom_1",
+      "output_chars": 3359
+    },
+    {
+      "ops": "StreamWriteCustom_1",
+      "child_ops": "StreamWriteCustom_2",
+      "eligible": true,
+      "best_parent_task_duration_us": 25.021,
+      "child_task_duration_us": 20.161,
+      "reduction_percent": 19.4236841053515,
+      "threshold_percent": 1.0,
+      "input_chars": 8824,
+      "source_strategies": 1,
+      "available_chain_steps": 1,
+      "composition_mode": "single_step",
+      "final_child_ops": "StreamWriteCustom_2",
+      "output_chars": 3319
+    },
+    {
+      "ops": "StreamWriteCustom_2",
+      "eligible": false,
+      "exclusion_reason": "manifest或child缺失"
+    }
+  ]
+}

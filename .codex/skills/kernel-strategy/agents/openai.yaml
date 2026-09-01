@@ -1,4 +1,4 @@
 interface:
-  display_name: "Kernel Strategy"
-  short_description: "把具体 cause 确定映射为唯一源码策略"
-  default_prompt: "使用 $kernel-strategy 按算子模式、最大合法 tile、搬运 chunk、计算、Buffer 和必要同步生成固定 cause→strategy actions；不搜索或试参。"
+  display_name: "Kernel Source Strategy"
+  short_description: "从完整源码生成一个紧凑优化策略"
+  default_prompt: "使用 $kernel-strategy 阅读完整 Host/Kernel 源码，先生成可校验的内部 planning 证明，再生成包含推理链、changes 和 guards 的紧凑策略。"
